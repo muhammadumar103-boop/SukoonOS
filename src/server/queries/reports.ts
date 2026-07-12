@@ -1,7 +1,13 @@
+import { isDemoMode } from "@/config/runtime";
+import { demoReports } from "@/data/demo-data";
 import { prisma } from "@/lib/prisma/client";
 import { formatDate, statusLabel } from "@/server/db/format";
 
 export async function getReports() {
+  if (isDemoMode) {
+    return demoReports;
+  }
+
   const reports = await prisma.report.findMany({
     orderBy: { updatedAt: "desc" },
     take: 50,

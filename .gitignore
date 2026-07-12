@@ -44,7 +44,6 @@ prisma/*.sqlite
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
 
 # os and editors
 .DS_Store

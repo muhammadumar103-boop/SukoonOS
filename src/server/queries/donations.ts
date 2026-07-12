@@ -1,7 +1,13 @@
+import { isDemoMode } from "@/config/runtime";
+import { demoDonationsPageData } from "@/data/demo-data";
 import { prisma } from "@/lib/prisma/client";
 import { formatCurrency, formatDate, statusLabel } from "@/server/db/format";
 
 export async function getDonationsPageData() {
+  if (isDemoMode) {
+    return demoDonationsPageData;
+  }
+
   const now = new Date();
   const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 

@@ -1,4 +1,6 @@
+import { isDemoMode } from "@/config/runtime";
 import { prisma } from "@/lib/prisma/client";
+import type { Prisma } from "@prisma/client";
 import type { AuthenticatedUser } from "@/server/auth/session";
 
 type LogInput = {
@@ -10,6 +12,10 @@ type LogInput = {
 };
 
 export async function logActivity(input: LogInput) {
+  if (isDemoMode) {
+    return;
+  }
+
   try {
     await prisma.activityLog.create({
       data: {
@@ -17,7 +23,7 @@ export async function logActivity(input: LogInput) {
         action: input.action,
         message: input.message,
         actorId: input.actor?.id,
-        metadata: input.metadata,
+        metadata: input.metadata as Prisma.InputJsonValue | undefined,
       },
     });
   } catch (error) {

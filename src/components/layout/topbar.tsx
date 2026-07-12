@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { Bell, ChevronDown, Menu, Search } from "lucide-react";
 import { navigationItems } from "@/config/navigation";
@@ -52,7 +53,7 @@ export function Topbar({ user }: TopbarProps) {
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={item.href as Route}
               className={cn(
                 "flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-xs font-medium",
                 active ? "bg-emerald-700 text-white" : "bg-emerald-50 text-emerald-800",

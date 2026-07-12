@@ -1,5 +1,7 @@
 import { HeartHandshake } from "lucide-react";
+import Link from "next/link";
 import { LoginForm } from "@/app/login/login-form";
+import { isDemoMode } from "@/config/runtime";
 
 export default function LoginPage() {
   return (
@@ -38,13 +40,15 @@ export default function LoginPage() {
           <div>
             <p className="text-sm font-medium text-emerald-700">Welcome back</p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Sign in to SukoonOS</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">Sign in with your Sukoon Charity account.</p>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              {isDemoMode ? "Local demo mode is enabled. No credentials are required." : "Sign in with your Sukoon Charity account."}
+            </p>
           </div>
           <LoginForm />
           <div className="mt-6 flex items-center justify-between text-sm">
-            <a className="font-medium text-emerald-700" href="/">
+            <Link className="font-medium text-emerald-700" href="/">
               Open dashboard
-            </a>
+            </Link>
             <span className="text-slate-400">Secure access</span>
           </div>
         </div>

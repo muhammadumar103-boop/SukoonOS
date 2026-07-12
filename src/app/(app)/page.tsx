@@ -108,7 +108,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="rounded-lg border border-emerald-100 bg-white p-5 shadow-sm shadow-emerald-950/5">
-          <h2 className="text-base font-semibold text-slate-950">Today's tasks</h2>
+          <h2 className="text-base font-semibold text-slate-950">Today&apos;s tasks</h2>
           <div className="mt-5 overflow-hidden rounded-lg border border-slate-100">
             <table className="w-full text-left text-sm">
               <thead className="bg-emerald-50 text-xs uppercase tracking-wide text-emerald-800">

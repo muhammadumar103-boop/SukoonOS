@@ -1,7 +1,13 @@
+import { isDemoMode } from "@/config/runtime";
+import { demoDonorsPageData } from "@/data/demo-data";
 import { prisma } from "@/lib/prisma/client";
 import { formatCurrency, statusLabel } from "@/server/db/format";
 
 export async function getDonorsPageData() {
+  if (isDemoMode) {
+    return demoDonorsPageData;
+  }
+
   const donors = await prisma.donor.findMany({
     include: {
       donations: {

@@ -1,3 +1,14 @@
+import { isDemoMode } from "@/config/runtime";
+import {
+  demoDonationsPageData,
+  demoDonorsPageData,
+  demoExpenses,
+  demoProjects,
+  demoReports,
+  demoSettingsSections,
+  demoTransfers,
+} from "@/data/demo-data";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma/client";
 import type { AuthenticatedUser } from "@/server/auth/session";
 import { logActivity } from "@/server/services/logger";
@@ -13,6 +24,26 @@ import {
 
 type ResourceName = "project" | "donor" | "donation" | "expense" | "transfer" | "report" | "setting";
 
+function jsonValue(value: unknown): Prisma.InputJsonValue {
+  if (value === null || value === undefined) {
+    return {};
+  }
+
+  return value as Prisma.InputJsonValue;
+}
+
+function nullableJsonValue(value: unknown): Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return Prisma.JsonNull;
+  }
+
+  return value as Prisma.InputJsonValue;
+}
+
 async function logMutation(resource: ResourceName, action: string, id: string, actor: AuthenticatedUser) {
   const type = resource === "setting" ? "SETTING" : resource.toUpperCase();
   await logActivity({
@@ -26,8 +57,11 @@ async function logMutation(resource: ResourceName, action: string, id: string, a
 
 export const resourceService = {
   projects: {
-    list: () => prisma.project.findMany({ orderBy: { updatedAt: "desc" } }),
-    get: (id: string) => prisma.project.findUniqueOrThrow({ where: { id } }),
+    list: async () => isDemoMode ? demoProjects : prisma.project.findMany({ orderBy: { updatedAt: "desc" } }),
+    get: async (id: string) => {
+      if (isDemoMode) return demoProjects.find((item) => item.id === id) ?? Promise.reject(new Error("Not found"));
+      return prisma.project.findUniqueOrThrow({ where: { id } });
+    },
     create: async (input: unknown, actor: AuthenticatedUser) => {
       const record = await prisma.project.create({ data: projectSchema.parse(input) });
       await logMutation("project", "Created", record.id, actor);
@@ -45,8 +79,11 @@ export const resourceService = {
     },
   },
   donors: {
-    list: () => prisma.donor.findMany({ orderBy: { updatedAt: "desc" } }),
-    get: (id: string) => prisma.donor.findUniqueOrThrow({ where: { id } }),
+    list: async () => isDemoMode ? demoDonorsPageData.donors : prisma.donor.findMany({ orderBy: { updatedAt: "desc" } }),
+    get: async (id: string) => {
+      if (isDemoMode) return demoDonorsPageData.donors.find((item) => item.id === id) ?? Promise.reject(new Error("Not found"));
+      return prisma.donor.findUniqueOrThrow({ where: { id } });
+    },
     create: async (input: unknown, actor: AuthenticatedUser) => {
       const record = await prisma.donor.create({ data: donorSchema.parse(input) });
       await logMutation("donor", "Created", record.id, actor);
@@ -64,8 +101,11 @@ export const resourceService = {
     },
   },
   donations: {
-    list: () => prisma.donation.findMany({ include: { donor: true, project: true }, orderBy: { receivedAt: "desc" } }),
-    get: (id: string) => prisma.donation.findUniqueOrThrow({ where: { id }, include: { donor: true, project: true } }),
+    list: async () => isDemoMode ? demoDonationsPageData.donations : prisma.donation.findMany({ include: { donor: true, project: true }, orderBy: { receivedAt: "desc" } }),
+    get: async (id: string) => {
+      if (isDemoMode) return demoDonationsPageData.donations.find((item) => item.id === id) ?? Promise.reject(new Error("Not found"));
+      return prisma.donation.findUniqueOrThrow({ where: { id }, include: { donor: true, project: true } });
+    },
     create: async (input: unknown, actor: AuthenticatedUser) => {
       const record = await prisma.donation.create({ data: donationSchema.parse(input) });
       await logMutation("donation", "Created", record.id, actor);
@@ -83,8 +123,11 @@ export const resourceService = {
     },
   },
   expenses: {
-    list: () => prisma.expense.findMany({ include: { project: true }, orderBy: { submittedAt: "desc" } }),
-    get: (id: string) => prisma.expense.findUniqueOrThrow({ where: { id }, include: { project: true } }),
+    list: async () => isDemoMode ? demoExpenses : prisma.expense.findMany({ include: { project: true }, orderBy: { submittedAt: "desc" } }),
+    get: async (id: string) => {
+      if (isDemoMode) return demoExpenses.find((item) => item.id === id) ?? Promise.reject(new Error("Not found"));
+      return prisma.expense.findUniqueOrThrow({ where: { id }, include: { project: true } });
+    },
     create: async (input: unknown, actor: AuthenticatedUser) => {
       const record = await prisma.expense.create({ data: expenseSchema.parse(input) });
       await logMutation("expense", "Created", record.id, actor);
@@ -102,8 +145,11 @@ export const resourceService = {
     },
   },
   transfers: {
-    list: () => prisma.transfer.findMany({ include: { fromAccount: true, toAccount: true }, orderBy: { createdAt: "desc" } }),
-    get: (id: string) => prisma.transfer.findUniqueOrThrow({ where: { id }, include: { fromAccount: true, toAccount: true } }),
+    list: async () => isDemoMode ? demoTransfers : prisma.transfer.findMany({ include: { fromAccount: true, toAccount: true }, orderBy: { createdAt: "desc" } }),
+    get: async (id: string) => {
+      if (isDemoMode) return demoTransfers.find((item) => item.id === id) ?? Promise.reject(new Error("Not found"));
+      return prisma.transfer.findUniqueOrThrow({ where: { id }, include: { fromAccount: true, toAccount: true } });
+    },
     create: async (input: unknown, actor: AuthenticatedUser) => {
       const record = await prisma.transfer.create({ data: transferSchema.parse(input) });
       await logMutation("transfer", "Created", record.id, actor);
@@ -121,15 +167,20 @@ export const resourceService = {
     },
   },
   reports: {
-    list: () => prisma.report.findMany({ orderBy: { updatedAt: "desc" } }),
-    get: (id: string) => prisma.report.findUniqueOrThrow({ where: { id } }),
+    list: async () => isDemoMode ? demoReports : prisma.report.findMany({ orderBy: { updatedAt: "desc" } }),
+    get: async (id: string) => {
+      if (isDemoMode) return demoReports.find((item) => item.id === id) ?? Promise.reject(new Error("Not found"));
+      return prisma.report.findUniqueOrThrow({ where: { id } });
+    },
     create: async (input: unknown, actor: AuthenticatedUser) => {
-      const record = await prisma.report.create({ data: reportSchema.parse(input) });
+      const data = reportSchema.parse(input);
+      const record = await prisma.report.create({ data: { ...data, payload: nullableJsonValue(data.payload) } });
       await logMutation("report", "Created", record.id, actor);
       return record;
     },
     update: async (id: string, input: unknown, actor: AuthenticatedUser) => {
-      const record = await prisma.report.update({ where: { id }, data: reportSchema.partial().parse(input) });
+      const data = reportSchema.partial().parse(input);
+      const record = await prisma.report.update({ where: { id }, data: { ...data, payload: nullableJsonValue(data.payload) } });
       await logMutation("report", "Updated", record.id, actor);
       return record;
     },
@@ -140,15 +191,39 @@ export const resourceService = {
     },
   },
   settings: {
-    list: () => prisma.appSetting.findMany({ orderBy: { label: "asc" } }),
-    get: (id: string) => prisma.appSetting.findUniqueOrThrow({ where: { id } }),
+    list: async () => isDemoMode ? demoSettingsSections.map((setting) => ({
+      id: setting.id,
+      title: setting.title,
+      description: setting.description,
+      key: setting.key,
+      isSecret: setting.isSecret,
+    })) : prisma.appSetting.findMany({ orderBy: { label: "asc" } }),
+    get: async (id: string) => {
+      if (isDemoMode) {
+        const setting = demoSettingsSections.find((item) => item.id === id);
+        if (!setting) return Promise.reject(new Error("Not found"));
+        return {
+          id: setting.id,
+          title: setting.title,
+          description: setting.description,
+          key: setting.key,
+          isSecret: setting.isSecret,
+        };
+      }
+      return prisma.appSetting.findUniqueOrThrow({ where: { id } });
+    },
     create: async (input: unknown, actor: AuthenticatedUser) => {
-      const record = await prisma.appSetting.create({ data: settingSchema.parse(input) });
+      const data = settingSchema.parse(input);
+      const record = await prisma.appSetting.create({ data: { ...data, value: jsonValue(data.value) } });
       await logMutation("setting", "Created", record.id, actor);
       return record;
     },
     update: async (id: string, input: unknown, actor: AuthenticatedUser) => {
-      const record = await prisma.appSetting.update({ where: { id }, data: settingSchema.partial().parse(input) });
+      const data = settingSchema.partial().parse(input);
+      const record = await prisma.appSetting.update({
+        where: { id },
+        data: { ...data, value: data.value === undefined ? undefined : jsonValue(data.value) },
+      });
       await logMutation("setting", "Updated", record.id, actor);
       return record;
     },

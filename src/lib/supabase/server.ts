@@ -1,7 +1,19 @@
 import { cookies } from "next/headers";
+import type { ResponseCookie } from "next/dist/compiled/@edge-runtime/cookies";
 import { createServerClient } from "@supabase/ssr";
+import { isDemoMode } from "@/config/runtime";
+
+type CookieToSet = {
+  name: string;
+  value: string;
+  options?: Partial<ResponseCookie>;
+};
 
 export async function createSupabaseServerClient() {
+  if (isDemoMode) {
+    throw new Error("Supabase is not available in local demo mode.");
+  }
+
   const cookieStore = await cookies();
 
   return createServerClient(
@@ -12,7 +24,7 @@ export async function createSupabaseServerClient() {
         getAll() {
           return cookieStore.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: CookieToSet[]) {
           try {
             cookiesToSet.forEach(({ name, value, options }) => {
               cookieStore.set(name, value, options);

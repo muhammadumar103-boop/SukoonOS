@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import { isDemoMode } from "@/config/runtime";
+import { demoUser } from "@/data/demo-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma/client";
 import { isRole, type Role } from "@/server/auth/roles";
@@ -24,6 +26,10 @@ function roleFromMetadata(metadata: Record<string, unknown>): Role {
 }
 
 export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
+  if (isDemoMode) {
+    return demoUser;
+  }
+
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getUser();
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LockKeyhole, Mail } from "lucide-react";
+import { isDemoMode } from "@/config/runtime";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export function LoginForm() {
@@ -16,6 +17,12 @@ export function LoginForm() {
     event.preventDefault();
     setLoading(true);
     setError(null);
+
+    if (isDemoMode) {
+      router.replace("/");
+      router.refresh();
+      return;
+    }
 
     const supabase = createSupabaseBrowserClient();
     const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -42,8 +49,8 @@ export function LoginForm() {
           <input
             className="w-full bg-transparent text-sm text-slate-950 outline-none placeholder:text-slate-400"
             onChange={(event) => setEmail(event.target.value)}
-            placeholder="you@sukoon.org"
-            required
+            placeholder={isDemoMode ? "demo@sukoon.org" : "you@sukoon.org"}
+            required={!isDemoMode}
             type="email"
             value={email}
           />
@@ -56,8 +63,8 @@ export function LoginForm() {
           <input
             className="w-full bg-transparent text-sm text-slate-950 outline-none placeholder:text-slate-400"
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="Enter your password"
-            required
+            placeholder={isDemoMode ? "Demo mode does not require a password" : "Enter your password"}
+            required={!isDemoMode}
             type="password"
             value={password}
           />
@@ -68,7 +75,7 @@ export function LoginForm() {
         className="h-11 w-full rounded-md bg-emerald-700 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-70"
         disabled={loading}
       >
-        {loading ? "Signing in..." : "Sign in"}
+        {loading ? "Opening..." : isDemoMode ? "Open local demo" : "Sign in"}
       </button>
     </form>
   );

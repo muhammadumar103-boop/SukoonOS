@@ -1,3 +1,5 @@
+import { isDemoMode } from "@/config/runtime";
+import { demoDashboardData, demoProjects } from "@/data/demo-data";
 import { prisma } from "@/lib/prisma/client";
 import { formatCurrency, formatDate, statusLabel } from "@/server/db/format";
 
@@ -10,6 +12,10 @@ function monthLabel(date: Date) {
 }
 
 export async function getDashboardData() {
+  if (isDemoMode) {
+    return demoDashboardData;
+  }
+
   const now = new Date();
   const currentMonth = startOfMonth(now);
   const sevenMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 6, 1);
@@ -149,6 +155,10 @@ export async function getDashboardData() {
 }
 
 export async function getProjects() {
+  if (isDemoMode) {
+    return demoProjects;
+  }
+
   const projects = await prisma.project.findMany({
     orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
   });

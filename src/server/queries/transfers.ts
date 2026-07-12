@@ -1,7 +1,13 @@
+import { isDemoMode } from "@/config/runtime";
+import { demoTransfers } from "@/data/demo-data";
 import { prisma } from "@/lib/prisma/client";
 import { formatCurrency, formatDate, statusLabel } from "@/server/db/format";
 
 export async function getTransfers() {
+  if (isDemoMode) {
+    return demoTransfers;
+  }
+
   const transfers = await prisma.transfer.findMany({
     include: { fromAccount: true, toAccount: true },
     orderBy: [{ scheduledFor: "desc" }, { createdAt: "desc" }],

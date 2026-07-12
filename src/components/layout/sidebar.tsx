@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { HeartHandshake } from "lucide-react";
 import { navigationItems } from "@/config/navigation";
@@ -26,7 +27,7 @@ export function Sidebar() {
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={item.href as Route}
               className={cn(
                 "flex h-11 items-center gap-3 rounded-md px-3 text-sm font-medium transition",
                 active

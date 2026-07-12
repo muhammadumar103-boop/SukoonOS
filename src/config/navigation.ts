@@ -1,6 +1,5 @@
 import {
   ArrowRightLeft,
-  BadgeDollarSign,
   BarChart3,
   BriefcaseBusiness,
   HandCoins,
