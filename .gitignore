@@ -1,0 +1,62 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+.pnpm-store
+
+# next.js
+/.next
+/out
+
+# production
+/build
+/dist
+
+# local env files
+.env
+.env*.local
+!.env.example
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# prisma
+prisma/*.db
+prisma/*.db-journal
+prisma/*.sqlite
+
+# vercel
+.vercel
+
+# testing and coverage
+/coverage
+/playwright-report
+/test-results
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# os and editors
+.DS_Store
+Thumbs.db
+*.pem
+*.swp
+*.swo
+.idea
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# local artifacts
+.agents
+.codex
