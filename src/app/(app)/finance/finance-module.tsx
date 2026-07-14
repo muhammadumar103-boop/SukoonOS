@@ -16,17 +16,15 @@ import {
   WalletCards,
 } from "lucide-react";
 import { StatusBadge } from "@/components/data-display/status-badge";
-import { demoDonationsPageData, demoTransfers } from "@/data/demo-data";
+import { accountBalanceFromLedger, buildFinanceLedger, type FinanceLedgerEntry } from "@/lib/finance/ledger";
 import {
   convertedExpenseAmounts,
   defaultFinanceAccounts,
   defaultFinanceBudgets,
-  defaultUsdToPkrRate,
   expenseCategories,
   formatMoney,
   normalizeFinanceAccount,
   normalizeFinanceBudget,
-  parseMoney,
   sukoonProjects,
   type AccountKind,
   type Currency,
@@ -35,21 +33,8 @@ import {
   type LocalExpense,
 } from "@/lib/finance/local-finance";
 import { loadLocalWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
-import type { LocalWorkspace } from "@/lib/local-data/schema";
+import type { LocalDonation, LocalTransfer, LocalWorkspace } from "@/lib/local-data/schema";
 import { cn } from "@/lib/utils";
-
-type AccountMovement = {
-  id: string;
-  date: string;
-  type: "Donation" | "Expense" | "Transfer";
-  accountId: string;
-  description: string;
-  project: string;
-  party: string;
-  amount: number;
-  currency: Currency;
-  status: string;
-};
 
 type AccountFormState = {
   name: string;
@@ -89,106 +74,12 @@ const emptyBudgetForm: BudgetFormState = {
   owner: "",
 };
 
-function isoDateFromDemoDate(value: string, fallbackOffset: number) {
-  const parsed = Date.parse(value);
-  if (Number.isFinite(parsed)) {
-    return new Date(parsed).toISOString().slice(0, 10);
-  }
-
-  return new Date(Date.now() - fallbackOffset * 86400000).toISOString().slice(0, 10);
-}
-
-function accountForExpense(expense: LocalExpense) {
-  if (expense.fundingAccountId) {
-    return expense.fundingAccountId;
-  }
-
-  if (expense.paymentMethod === "Cash") {
-    return expense.originalCurrency === "PKR" ? "field-cash-pkr" : "petty-cash-usd";
-  }
-
-  return expense.originalCurrency === "PKR" ? "operations-bank-pkr" : "main-donations-bank";
-}
-
-function demoTransferMovements(): AccountMovement[] {
-  const completedTransfers = demoTransfers.filter((transfer) => transfer.status === "Completed" || transfer.status === "Scheduled");
-
-  return completedTransfers.flatMap((transfer, index) => {
-    const amount = parseMoney(transfer.amount);
-    const date = isoDateFromDemoDate(transfer.date, index + 4);
-    const toFieldCash = transfer.to === "Field Operations";
-    const destinationAccountId = toFieldCash ? "field-cash-pkr" : "operations-bank-pkr";
-    const destinationAmount = toFieldCash ? amount * defaultUsdToPkrRate : amount * defaultUsdToPkrRate;
-
-    return [
-      {
-        id: `transfer-${transfer.id}-out`,
-        date,
-        type: "Transfer" as const,
-        accountId: "main-donations-bank",
-        description: `${transfer.from} to ${transfer.to}`,
-        project: transfer.to,
-        party: transfer.from,
-        amount: -amount,
-        currency: "USD" as const,
-        status: transfer.status,
-      },
-      {
-        id: `transfer-${transfer.id}-in`,
-        date,
-        type: "Transfer" as const,
-        accountId: destinationAccountId,
-        description: `${transfer.from} to ${transfer.to}`,
-        project: transfer.to,
-        party: transfer.from,
-        amount: destinationAmount,
-        currency: "PKR" as const,
-        status: transfer.status,
-      },
-    ];
-  });
-}
-
-function buildMovements(expenses: LocalExpense[]): AccountMovement[] {
-  const donationMovements: AccountMovement[] = demoDonationsPageData.donations.map((donation, index) => {
-    const amount = parseMoney(donation.amount);
-
-    return {
-      id: `donation-${donation.id}`,
-      date: isoDateFromDemoDate(donation.date, index),
-      type: "Donation",
-      accountId: "main-donations-bank",
-      description: `Donation from ${donation.donor}`,
-      project: donation.fund,
-      party: donation.donor,
-      amount,
-      currency: "USD",
-      status: donation.status,
-    };
-  });
-
-  const expenseMovements = expenses
-    .filter((expense) => expense.approvalStatus !== "Rejected" && expense.approvalStatus !== "Draft")
-    .map((expense) => ({
-      id: `expense-${expense.id}`,
-      date: expense.date,
-      type: "Expense" as const,
-      accountId: accountForExpense(expense),
-      description: expense.description || expense.category,
-      project: expense.project,
-      party: expense.paidBy || "Not set",
-      amount: -Math.abs(expense.originalAmount),
-      currency: expense.originalCurrency,
-      status: expense.approvalStatus,
-    }));
-
-  return [...donationMovements, ...expenseMovements, ...demoTransferMovements()].sort((a, b) => b.date.localeCompare(a.date));
-}
-
 export function FinanceModule() {
   const [accounts, setAccounts] = useState<FinanceAccount[]>(defaultFinanceAccounts);
   const [budgets, setBudgets] = useState<FinanceBudget[]>(defaultFinanceBudgets);
   const [expenses, setExpenses] = useState<LocalExpense[]>([]);
+  const [donations, setDonations] = useState<LocalDonation[]>([]);
+  const [transfers, setTransfers] = useState<LocalTransfer[]>([]);
   const [accountSearch, setAccountSearch] = useState("");
   const [budgetSearch, setBudgetSearch] = useState("");
   const [accountForm, setAccountForm] = useState<AccountFormState>(emptyAccountForm);
@@ -202,6 +93,8 @@ export function FinanceModule() {
     setAccounts(localWorkspace.financeAccounts);
     setBudgets(localWorkspace.financeBudgets);
     setExpenses(localWorkspace.expenses);
+    setDonations(localWorkspace.donations);
+    setTransfers(localWorkspace.transfers);
     setHydrated(true);
   }, []);
 
@@ -211,26 +104,25 @@ export function FinanceModule() {
     }
 
     if (workspaceRef.current) {
-      workspaceRef.current = saveLocalWorkspace({ ...workspaceRef.current, financeAccounts: accounts, financeBudgets: budgets, expenses });
+      workspaceRef.current = saveLocalWorkspace({ ...workspaceRef.current, financeAccounts: accounts, financeBudgets: budgets, expenses, donations, transfers });
     }
-  }, [accounts, budgets, expenses, hydrated]);
+  }, [accounts, budgets, donations, expenses, hydrated, transfers]);
 
-  const movements = useMemo(() => buildMovements(expenses), [expenses]);
+  const ledgerEntries = useMemo(() => buildFinanceLedger({ financeAccounts: accounts, expenses, donations, transfers }), [accounts, donations, expenses, transfers]);
 
   const accountRows = useMemo(() => {
     return accounts.map((account) => {
-      const accountMovements = movements.filter((movement) => movement.accountId === account.id && movement.currency === account.currency);
-      const movementTotal = accountMovements.reduce((sum, movement) => sum + movement.amount, 0);
-      const balance = account.openingBalance + movementTotal;
+      const balance = accountBalanceFromLedger(account, ledgerEntries);
+      const accountMovements = ledgerEntries.filter((entry) => entry.accountId === account.id || entry.contraAccountId === account.id);
 
       return {
         ...account,
-        movementTotal,
+        movementTotal: balance - account.openingBalance,
         balance,
         movementCount: accountMovements.length,
       };
     });
-  }, [accounts, movements]);
+  }, [accounts, ledgerEntries]);
 
   const filteredAccounts = useMemo(() => {
     const query = accountSearch.trim().toLowerCase();
@@ -288,14 +180,15 @@ export function FinanceModule() {
   }, [accountRows]);
 
   const movementTotals = useMemo(() => {
-    return movements.reduce(
+    return ledgerEntries.reduce(
       (result, movement) => {
-        result[movement.currency] += movement.amount;
+        result.PKR += movement.netPkrAmount;
+        result.USD += movement.netUsdAmount;
         return result;
       },
       { PKR: 0, USD: 0 },
     );
-  }, [movements]);
+  }, [ledgerEntries]);
 
   function handleAddAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -539,7 +432,7 @@ export function FinanceModule() {
           </Link>
         </div>
         <div className="divide-y divide-slate-100">
-          {movements.slice(0, 8).map((movement) => (
+          {ledgerEntries.slice(0, 8).map((movement) => (
             <MovementRow key={movement.id} movement={movement} account={accounts.find((account) => account.id === movement.accountId)} />
           ))}
         </div>
@@ -598,13 +491,14 @@ function AccountGroup({
   );
 }
 
-function MovementRow({ movement, account }: { movement: AccountMovement; account?: FinanceAccount }) {
+function MovementRow({ movement, account }: { movement: FinanceLedgerEntry; account?: FinanceAccount }) {
   const Icon = movement.type === "Donation" ? ArrowDownLeft : movement.type === "Expense" ? ArrowUpRight : ArrowRightLeft;
+  const displayAmount = movement.type === "Transfer" ? movement.originalAmount : movement.originalCurrency === "PKR" ? movement.netPkrAmount : movement.netUsdAmount;
 
   return (
     <div className="grid gap-3 p-5 sm:grid-cols-[1fr_auto] sm:items-center">
       <div className="flex gap-3">
-        <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-md", movement.amount < 0 ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700")}>
+        <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-md", displayAmount < 0 ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700")}>
           <Icon className="size-5" aria-hidden="true" />
         </div>
         <div>
@@ -616,8 +510,8 @@ function MovementRow({ movement, account }: { movement: AccountMovement; account
       </div>
       <div className="flex items-center gap-3 sm:justify-end">
         <StatusBadge value={movement.status} />
-        <p className={cn("min-w-32 text-right font-semibold", movement.amount < 0 ? "text-red-700" : "text-emerald-700")}>
-          {formatMoney(movement.amount, movement.currency)}
+        <p className={cn("min-w-32 text-right font-semibold", displayAmount < 0 ? "text-red-700" : movement.type === "Transfer" ? "text-slate-700" : "text-emerald-700")}>
+          {formatMoney(displayAmount, movement.originalCurrency)}
         </p>
       </div>
     </div>

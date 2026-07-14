@@ -16,6 +16,7 @@ import {
   type LocalTransfer,
   type LocalWorkspace,
 } from "@/lib/local-data/schema";
+import { sampleLocalDonations, sampleLocalTransfers } from "@/lib/local-data/seeds";
 
 type LegacyCollections = {
   expenses?: unknown[];
@@ -81,6 +82,8 @@ export function createSampleWorkspace(legacy: LegacyCollections = {}): LocalWork
     financeAccounts: normalizeAccounts(legacy.financeAccounts),
     financeBudgets: normalizeBudgets(legacy.financeBudgets),
     expenses: normalizeExpenses(legacy.expenses),
+    donations: sampleLocalDonations,
+    transfers: sampleLocalTransfers,
   };
 }
 
@@ -90,17 +93,20 @@ export function migrateLocalWorkspace(input: unknown, legacy: LegacyCollections 
   const existingExpenses = legacy.expenses ?? candidate.expenses;
   const existingAccounts = legacy.financeAccounts ?? candidate.financeAccounts ?? candidate.accounts;
   const existingBudgets = legacy.financeBudgets ?? candidate.financeBudgets ?? candidate.budgets;
+  const sampleDataEnabled = Boolean(candidate.sampleDataEnabled);
+  const existingDonations = candidate.donations?.length ? candidate.donations : sampleDataEnabled ? sampleLocalDonations : [];
+  const existingTransfers = candidate.transfers?.length ? candidate.transfers : sampleDataEnabled ? sampleLocalTransfers : [];
 
   return {
     schemaVersion: localWorkspaceSchemaVersion,
-    sampleDataEnabled: Boolean(candidate.sampleDataEnabled),
+    sampleDataEnabled,
     createdAt: typeof candidate.createdAt === "string" ? candidate.createdAt : timestamp,
     updatedAt: timestamp,
     financeAccounts: normalizeAccounts(existingAccounts),
     financeBudgets: normalizeBudgets(existingBudgets),
     expenses: normalizeExpenses(existingExpenses),
-    donations: normalizeDonations(candidate.donations),
-    transfers: normalizeTransfers(candidate.transfers),
+    donations: normalizeDonations(existingDonations),
+    transfers: normalizeTransfers(existingTransfers),
     projects: Array.isArray(candidate.projects) ? candidate.projects : [],
     donors: Array.isArray(candidate.donors) ? candidate.donors : [],
     tasks: Array.isArray(candidate.tasks) ? candidate.tasks : [],
