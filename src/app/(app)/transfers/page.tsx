@@ -1,9 +1,23 @@
 import { ArrowRight } from "lucide-react";
 import { PageHeader } from "@/components/data-display/page-header";
 import { StatusBadge } from "@/components/data-display/status-badge";
+import { isDemoMode } from "@/config/runtime";
+import { LocalTransfersManager } from "@/app/(app)/transfers/local-transfers-manager";
 import { getTransfers } from "@/server/queries/transfers";
 
 export default async function TransfersPage() {
+  if (isDemoMode) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Transfers"
+          description="Move funds between Sukoon accounts locally in demo mode without counting transfers as income or expenses."
+        />
+        <LocalTransfersManager />
+      </div>
+    );
+  }
+
   const transfers = await getTransfers();
 
   return (
