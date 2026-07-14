@@ -1,4 +1,6 @@
 import { PageHeader } from "@/components/data-display/page-header";
+import { LocalWorkspaceBanner } from "@/components/data-display/local-workspace-banner";
+import { isDemoMode } from "@/config/runtime";
 import { FinanceModule } from "@/app/(app)/finance/finance-module";
 
 export default function FinancePage() {
@@ -8,6 +10,7 @@ export default function FinancePage() {
         title="Finance"
         description="Manage charity bank accounts, cash accounts, budgets, and automatic balances from every financial movement."
       />
+      {isDemoMode ? <LocalWorkspaceBanner /> : null}
       <FinanceModule />
     </div>
   );

@@ -164,6 +164,25 @@ export function FinanceModule() {
     );
   }, [budgetRows, budgetSearch]);
 
+  const budgetSummary = useMemo(() => {
+    return budgetRows.reduce(
+      (result, budget) => {
+        result[budget.currency].budget += budget.amount;
+        result[budget.currency].spent += budget.spent;
+        result[budget.currency].remaining += budget.remaining;
+        if (budget.remaining < 0) {
+          result.atRisk += 1;
+        }
+        return result;
+      },
+      {
+        PKR: { budget: 0, spent: 0, remaining: 0 },
+        USD: { budget: 0, spent: 0, remaining: 0 },
+        atRisk: 0,
+      },
+    );
+  }, [budgetRows]);
+
   const summary = useMemo(() => {
     return accountRows.reduce(
       (result, account) => {
@@ -310,7 +329,15 @@ export function FinanceModule() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1fr_380px]">
-        <div className="rounded-lg border border-emerald-100 bg-white shadow-sm shadow-emerald-950/5">
+        <div className="space-y-6">
+          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <SummaryCard icon={CircleDollarSign} label="Budgeted PKR" value={formatMoney(budgetSummary.PKR.budget, "PKR")} detail={`Spent ${formatMoney(budgetSummary.PKR.spent, "PKR")}`} />
+            <SummaryCard icon={CircleDollarSign} label="Budgeted USD" value={formatMoney(budgetSummary.USD.budget, "USD")} detail={`Spent ${formatMoney(budgetSummary.USD.spent, "USD")}`} />
+            <SummaryCard icon={WalletCards} label="Remaining PKR" value={formatMoney(budgetSummary.PKR.remaining, "PKR")} />
+            <SummaryCard icon={WalletCards} label="Budgets at risk" value={String(budgetSummary.atRisk)} detail="Negative remaining balance" />
+          </section>
+
+          <div className="rounded-lg border border-emerald-100 bg-white shadow-sm shadow-emerald-950/5">
           <div className="flex flex-col gap-3 border-b border-emerald-100 p-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold tracking-tight text-slate-950">Budgets</h2>
@@ -378,6 +405,7 @@ export function FinanceModule() {
                 ) : null}
               </tbody>
             </table>
+          </div>
           </div>
         </div>
 

@@ -56,7 +56,7 @@ Verification:
 
 ### Milestone 2: Finance Core
 
-Status: Not started
+Status: Complete
 
 Scope:
 
@@ -74,6 +74,14 @@ Acceptance criteria:
 - Transfers do not count as income or expense.
 - Both USD and PKR display everywhere finance data appears.
 - Existing expenses remain available after migration.
+
+Verification:
+
+- Shared ledger projection now powers the Finance page and Finance Ledger.
+- Expenses, donations, and transfers all write to the local workspace in demo mode.
+- Finance routes now show a demo-workspace banner with `Reload sample data` and `Clear sample data` controls.
+- `npm run build` passed on 2026-07-15.
+- `npm run typecheck` passed on 2026-07-15 after the generated `.next/types` files were refreshed by the build.
 
 ### Milestone 3: Projects And Budgets
 

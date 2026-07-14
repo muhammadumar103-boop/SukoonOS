@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/data-display/page-header";
+import { LocalWorkspaceBanner } from "@/components/data-display/local-workspace-banner";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { isDemoMode } from "@/config/runtime";
 import { LocalDonationsManager } from "@/app/(app)/donations/local-donations-manager";
@@ -12,6 +13,7 @@ export default async function DonationsPage() {
           title="Donations"
           description="Record local demo donations with account funding, dual-currency values, receipts, filters, and ledger integration."
         />
+        <LocalWorkspaceBanner />
         <LocalDonationsManager />
       </div>
     );
