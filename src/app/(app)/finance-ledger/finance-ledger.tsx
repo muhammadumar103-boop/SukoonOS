@@ -10,6 +10,7 @@ import {
   formatMoney,
   localExpenseStorageKey,
   normalizeLocalExpense,
+  parseMoney,
   type Currency,
   type LocalExpense,
 } from "@/lib/finance/local-finance";
@@ -146,11 +147,6 @@ const staticLedgerEntries: LedgerEntry[] = [
     convertedLabel: formatMoney(15000 * defaultUsdToPkrRate, "PKR"),
   },
 ];
-
-function parseMoney(value: string) {
-  const numeric = Number(value.replace(/[^0-9.-]+/g, ""));
-  return Number.isFinite(numeric) ? numeric : 0;
-}
 
 function isoDateFromDemoDate(value: string, fallbackOffset: number) {
   const parsed = Date.parse(value);

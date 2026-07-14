@@ -2,6 +2,32 @@ export type Currency = "PKR" | "USD";
 
 export type ApprovalStatus = "Draft" | "Pending" | "Approved" | "Paid" | "Rejected";
 
+export type AccountKind = "Bank" | "Cash";
+
+export type FinanceAccount = {
+  id: string;
+  name: string;
+  kind: AccountKind;
+  currency: Currency;
+  institution: string;
+  purpose: string;
+  openingBalance: number;
+  status: "Active" | "Review" | "Paused";
+};
+
+export type BudgetPeriod = "Monthly" | "Quarterly" | "Annual";
+
+export type FinanceBudget = {
+  id: string;
+  name: string;
+  project: string;
+  category: string;
+  period: BudgetPeriod;
+  currency: Currency;
+  amount: number;
+  owner: string;
+};
+
 export type LocalExpense = {
   id: string;
   date: string;
@@ -19,6 +45,8 @@ export type LocalExpense = {
 };
 
 export const localExpenseStorageKey = "sukoonos.local.expenses.v1";
+export const localFinanceAccountsStorageKey = "sukoonos.local.finance.accounts.v1";
+export const localFinanceBudgetsStorageKey = "sukoonos.local.finance.budgets.v1";
 
 export const defaultUsdToPkrRate = 278;
 
@@ -52,6 +80,92 @@ export const sukoonProjects = [
 export const paymentMethods = ["Cash", "Bank Transfer", "Card", "Cheque", "Mobile Wallet"];
 
 export const approvalStatuses: ApprovalStatus[] = ["Draft", "Pending", "Approved", "Paid", "Rejected"];
+
+export const defaultFinanceAccounts: FinanceAccount[] = [
+  {
+    id: "main-donations-bank",
+    name: "Main Donations Bank",
+    kind: "Bank",
+    currency: "USD",
+    institution: "Sukoon International Account",
+    purpose: "Major gifts and international donor receipts",
+    openingBalance: 25000,
+    status: "Active",
+  },
+  {
+    id: "operations-bank-pkr",
+    name: "Operations Bank PKR",
+    kind: "Bank",
+    currency: "PKR",
+    institution: "Sukoon Pakistan Operations",
+    purpose: "Vendor payments, payroll, and program operations",
+    openingBalance: 2500000,
+    status: "Active",
+  },
+  {
+    id: "field-cash-pkr",
+    name: "Field Cash PKR",
+    kind: "Cash",
+    currency: "PKR",
+    institution: "Karachi Field Office",
+    purpose: "On-site distributions and petty cash",
+    openingBalance: 350000,
+    status: "Review",
+  },
+  {
+    id: "petty-cash-usd",
+    name: "Petty Cash USD",
+    kind: "Cash",
+    currency: "USD",
+    institution: "Finance Safe",
+    purpose: "Small USD reimbursements and emergency float",
+    openingBalance: 1200,
+    status: "Active",
+  },
+];
+
+export const defaultFinanceBudgets: FinanceBudget[] = [
+  {
+    id: "budget-hospital-medical",
+    name: "Hospital medical supply reserve",
+    project: "Hospital Project",
+    category: "Medical Supplies",
+    period: "Monthly",
+    currency: "PKR",
+    amount: 1800000,
+    owner: "Dr. Sameer Ali",
+  },
+  {
+    id: "budget-food-parcels",
+    name: "Food parcel distribution",
+    project: "Food Parcels",
+    category: "Food",
+    period: "Monthly",
+    currency: "PKR",
+    amount: 2400000,
+    owner: "Mariam Khan",
+  },
+  {
+    id: "budget-orphan-support",
+    name: "Orphan sponsorship operations",
+    project: "Orphan Sponsorship",
+    category: "Salaries/Wages",
+    period: "Quarterly",
+    currency: "USD",
+    amount: 18000,
+    owner: "Ayesha Noor",
+  },
+  {
+    id: "budget-general-operations",
+    name: "General operations overhead",
+    project: "General Operations",
+    category: "Utilities",
+    period: "Monthly",
+    currency: "PKR",
+    amount: 650000,
+    owner: "Bilal Ahmed",
+  },
+];
 
 const categoryAliases: Record<string, string> = {
   "Food Relief": "Food",
@@ -114,6 +228,37 @@ export function formatMoney(amount: number, currency: Currency) {
     currency,
     maximumFractionDigits: currency === "PKR" ? 0 : 2,
   }).format(amount);
+}
+
+export function parseMoney(value: string) {
+  const numeric = Number(value.replace(/[^0-9.-]+/g, ""));
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+export function normalizeFinanceAccount(account: Partial<FinanceAccount>): FinanceAccount {
+  return {
+    id: account.id ?? `account-${Date.now()}`,
+    name: account.name ?? "New finance account",
+    kind: account.kind ?? "Bank",
+    currency: account.currency ?? "PKR",
+    institution: account.institution ?? "",
+    purpose: account.purpose ?? "",
+    openingBalance: Number(account.openingBalance ?? 0),
+    status: account.status ?? "Active",
+  };
+}
+
+export function normalizeFinanceBudget(budget: Partial<FinanceBudget>): FinanceBudget {
+  return {
+    id: budget.id ?? `budget-${Date.now()}`,
+    name: budget.name ?? "New budget",
+    project: normalizeSukoonProject(budget.project ?? "General Operations"),
+    category: normalizeExpenseCategory(budget.category ?? "Other"),
+    period: budget.period ?? "Monthly",
+    currency: budget.currency ?? "PKR",
+    amount: Number(budget.amount ?? 0),
+    owner: budget.owner ?? "",
+  };
 }
 
 export function convertedExpenseAmounts(expense: Pick<LocalExpense, "originalAmount" | "originalCurrency" | "exchangeRate">) {
