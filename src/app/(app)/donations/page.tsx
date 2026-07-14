@@ -1,8 +1,22 @@
 import { PageHeader } from "@/components/data-display/page-header";
 import { StatusBadge } from "@/components/data-display/status-badge";
+import { isDemoMode } from "@/config/runtime";
+import { LocalDonationsManager } from "@/app/(app)/donations/local-donations-manager";
 import { getDonationsPageData } from "@/server/queries/donations";
 
 export default async function DonationsPage() {
+  if (isDemoMode) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Donations"
+          description="Record local demo donations with account funding, dual-currency values, receipts, filters, and ledger integration."
+        />
+        <LocalDonationsManager />
+      </div>
+    );
+  }
+
   const { donations, summary } = await getDonationsPageData();
 
   return (
