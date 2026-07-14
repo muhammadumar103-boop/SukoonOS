@@ -4,7 +4,14 @@ import {
   localFinanceBudgetsStorageKey,
 } from "@/lib/finance/local-finance";
 import { createEmptyWorkspace, createSampleWorkspace, migrateLocalWorkspace } from "@/lib/local-data/migrations";
-import { localWorkspaceStorageKey, type LocalWorkspace } from "@/lib/local-data/schema";
+import {
+  localWorkspaceBackupsStorageKey,
+  localWorkspaceStorageKey,
+  type LocalAuditLogEntry,
+  type LocalWorkspace,
+  type LocalWorkspaceBackup,
+} from "@/lib/local-data/schema";
+import { localWorkspaceSchema } from "@/lib/local-data/validation";
 
 type BrowserStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -28,6 +35,14 @@ function browserStorage(): BrowserStorage | null {
   return window.localStorage;
 }
 
+function createId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 function readLegacyCollections(storage: BrowserStorage) {
   const expenses = safeParse(storage.getItem(localExpenseStorageKey));
   const financeAccounts = safeParse(storage.getItem(localFinanceAccountsStorageKey));
@@ -46,6 +61,43 @@ function syncLegacyCollections(storage: BrowserStorage, workspace: LocalWorkspac
   storage.setItem(localFinanceBudgetsStorageKey, JSON.stringify(workspace.financeBudgets));
 }
 
+function workspaceCounts(workspace: LocalWorkspace) {
+  return {
+    accounts: workspace.financeAccounts.length,
+    budgets: workspace.financeBudgets.length,
+    expenses: workspace.expenses.length,
+    donations: workspace.donations.length,
+    transfers: workspace.transfers.length,
+    donors: workspace.donors.length,
+  };
+}
+
+function readBackups(storage: BrowserStorage) {
+  const backups = safeParse(storage.getItem(localWorkspaceBackupsStorageKey));
+  return Array.isArray(backups) ? (backups as LocalWorkspaceBackup[]) : [];
+}
+
+function validateWorkspace(workspace: unknown) {
+  return localWorkspaceSchema.parse(workspace);
+}
+
+export function appendAuditLogEntry(
+  workspace: LocalWorkspace,
+  entry: Omit<LocalAuditLogEntry, "id" | "createdAt">,
+) {
+  return {
+    ...workspace,
+    auditLog: [
+      {
+        id: createId(),
+        createdAt: new Date().toISOString(),
+        ...entry,
+      },
+      ...workspace.auditLog,
+    ].slice(0, 200),
+  };
+}
+
 export function loadLocalWorkspace(storage: BrowserStorage | null = browserStorage()): LocalWorkspace {
   if (!storage) {
     return createSampleWorkspace();
@@ -53,7 +105,7 @@ export function loadLocalWorkspace(storage: BrowserStorage | null = browserStora
 
   const legacy = readLegacyCollections(storage);
   const existing = safeParse(storage.getItem(localWorkspaceStorageKey));
-  const workspace = existing ? migrateLocalWorkspace(existing, legacy) : createSampleWorkspace(legacy);
+  const workspace = validateWorkspace(existing ? migrateLocalWorkspace(existing, legacy) : createSampleWorkspace(legacy));
 
   storage.setItem(localWorkspaceStorageKey, JSON.stringify(workspace));
   syncLegacyCollections(storage, workspace);
@@ -61,10 +113,12 @@ export function loadLocalWorkspace(storage: BrowserStorage | null = browserStora
 }
 
 export function saveLocalWorkspace(workspace: LocalWorkspace, storage: BrowserStorage | null = browserStorage()) {
-  const nextWorkspace = migrateLocalWorkspace({
-    ...workspace,
-    updatedAt: new Date().toISOString(),
-  });
+  const nextWorkspace = validateWorkspace(
+    migrateLocalWorkspace({
+      ...workspace,
+      updatedAt: new Date().toISOString(),
+    }),
+  );
 
   if (storage) {
     storage.setItem(localWorkspaceStorageKey, JSON.stringify(nextWorkspace));
@@ -74,14 +128,70 @@ export function saveLocalWorkspace(workspace: LocalWorkspace, storage: BrowserSt
   return nextWorkspace;
 }
 
-export function resetLocalWorkspace(options: { sampleData: boolean }, storage: BrowserStorage | null = browserStorage()) {
-  const workspace = options.sampleData ? createSampleWorkspace() : createEmptyWorkspace();
-  if (storage) {
-    storage.setItem(localWorkspaceStorageKey, JSON.stringify(workspace));
-    syncLegacyCollections(storage, workspace);
+export function createWorkspaceBackup(reason: string, storage: BrowserStorage | null = browserStorage()) {
+  if (!storage) {
+    return null;
   }
 
-  return workspace;
+  const workspace = loadLocalWorkspace(storage);
+  const backups = readBackups(storage);
+  const nextBackup: LocalWorkspaceBackup = {
+    id: `backup-${createId()}`,
+    createdAt: new Date().toISOString(),
+    reason,
+    workspace,
+  };
+
+  storage.setItem(localWorkspaceBackupsStorageKey, JSON.stringify([nextBackup, ...backups].slice(0, 10)));
+  return nextBackup;
+}
+
+export function exportLocalWorkspace(storage: BrowserStorage | null = browserStorage()) {
+  const workspace = loadLocalWorkspace(storage);
+  const audited = appendAuditLogEntry(workspace, {
+    entityType: "workspace",
+    entityId: "local",
+    action: "exported",
+    actor: "Local Demo User",
+    metadata: workspaceCounts(workspace),
+  });
+
+  saveLocalWorkspace(audited, storage);
+  return JSON.stringify(audited, null, 2);
+}
+
+export function importLocalWorkspace(input: string, storage: BrowserStorage | null = browserStorage()) {
+  createWorkspaceBackup("import", storage);
+  const parsed = JSON.parse(input) as unknown;
+  const validated = validateWorkspace(migrateLocalWorkspace(parsed));
+  const audited = appendAuditLogEntry(validated, {
+    entityType: "workspace",
+    entityId: "local",
+    action: "imported",
+    actor: "Local Demo User",
+    metadata: workspaceCounts(validated),
+  });
+
+  return saveLocalWorkspace(audited, storage);
+}
+
+export function resetLocalWorkspace(options: { sampleData: boolean }, storage: BrowserStorage | null = browserStorage()) {
+  createWorkspaceBackup(options.sampleData ? "reload-sample-data" : "clear-sample-data", storage);
+  const workspace = options.sampleData ? createSampleWorkspace() : createEmptyWorkspace();
+  const audited = appendAuditLogEntry(workspace, {
+    entityType: "workspace",
+    entityId: "local",
+    action: options.sampleData ? "reloaded-sample-data" : "cleared-sample-data",
+    actor: "Local Demo User",
+    metadata: { sampleDataEnabled: options.sampleData },
+  });
+
+  if (storage) {
+    storage.setItem(localWorkspaceStorageKey, JSON.stringify(audited));
+    syncLegacyCollections(storage, audited);
+  }
+
+  return audited;
 }
 
 export function clearLocalWorkspace(storage: BrowserStorage | null = browserStorage()) {

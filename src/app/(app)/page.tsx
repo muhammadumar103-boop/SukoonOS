@@ -1,4 +1,5 @@
 import { ArrowDownLeft, ArrowRightLeft, BadgeDollarSign, CheckCircle2, CreditCard, HandHeart, Landmark } from "lucide-react";
+import Link from "next/link";
 import { BarChart } from "@/components/charts/bar-chart";
 import { DonutChart } from "@/components/charts/donut-chart";
 import { MetricCard } from "@/components/data-display/metric-card";
@@ -34,9 +35,9 @@ export default async function DashboardPage() {
         title="Dashboard"
         description="A live-feeling operational overview for donations, funds, projects, approvals, and team priorities."
         action={
-          <button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800">
+          <Link className="inline-flex h-10 items-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800" href="/donations">
             New donation
-          </button>
+          </Link>
         }
       />
 

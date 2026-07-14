@@ -13,10 +13,11 @@ import {
   localWorkspaceSchemaVersion,
   type LegacyLocalWorkspaceInput,
   type LocalDonation,
+  type LocalDonor,
   type LocalTransfer,
   type LocalWorkspace,
 } from "@/lib/local-data/schema";
-import { sampleLocalDonations, sampleLocalTransfers } from "@/lib/local-data/seeds";
+import { sampleLocalDonations, sampleLocalDonors, sampleLocalTransfers } from "@/lib/local-data/seeds";
 
 type LegacyCollections = {
   expenses?: unknown[];
@@ -48,6 +49,10 @@ function normalizeDonations(donations: unknown[] | undefined): LocalDonation[] {
 
 function normalizeTransfers(transfers: unknown[] | undefined): LocalTransfer[] {
   return Array.isArray(transfers) ? (transfers as LocalTransfer[]) : [];
+}
+
+function normalizeDonors(donors: unknown[] | undefined): LocalDonor[] {
+  return Array.isArray(donors) ? (donors as LocalDonor[]) : [];
 }
 
 export function createEmptyWorkspace(): LocalWorkspace {
@@ -84,6 +89,7 @@ export function createSampleWorkspace(legacy: LegacyCollections = {}): LocalWork
     expenses: normalizeExpenses(legacy.expenses),
     donations: sampleLocalDonations,
     transfers: sampleLocalTransfers,
+    donors: sampleLocalDonors,
   };
 }
 
@@ -108,7 +114,7 @@ export function migrateLocalWorkspace(input: unknown, legacy: LegacyCollections 
     donations: normalizeDonations(existingDonations),
     transfers: normalizeTransfers(existingTransfers),
     projects: Array.isArray(candidate.projects) ? candidate.projects : [],
-    donors: Array.isArray(candidate.donors) ? candidate.donors : [],
+    donors: normalizeDonors(candidate.donors?.length ? candidate.donors : sampleDataEnabled ? sampleLocalDonors : []),
     tasks: Array.isArray(candidate.tasks) ? candidate.tasks : [],
     approvals: Array.isArray(candidate.approvals) ? candidate.approvals : [],
     reports: Array.isArray(candidate.reports) ? candidate.reports : [],

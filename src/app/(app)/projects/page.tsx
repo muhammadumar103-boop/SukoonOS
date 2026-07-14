@@ -1,3 +1,4 @@
+import { DeferredAction } from "@/components/data-display/deferred-action";
 import { PageHeader } from "@/components/data-display/page-header";
 import { ProgressBar } from "@/components/data-display/progress-bar";
 import { StatusBadge } from "@/components/data-display/status-badge";
@@ -11,7 +12,7 @@ export default async function ProjectsPage() {
       <PageHeader
         title="Projects"
         description="Track program budgets, delivery progress, owners, and projects that need operational attention."
-        action={<button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white">New project</button>}
+        action={<DeferredAction label="Coming in Milestone 3" />}
       />
       <section className="grid gap-4 lg:grid-cols-2">
         {projects.map((project) => (

@@ -1,4 +1,5 @@
 import { BarChart3 } from "lucide-react";
+import { DeferredAction } from "@/components/data-display/deferred-action";
 import { PageHeader } from "@/components/data-display/page-header";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { getReports } from "@/server/queries/reports";
@@ -11,7 +12,7 @@ export default async function ReportsPage() {
       <PageHeader
         title="Reports"
         description="Prepare finance summaries, impact reports, donor insights, and operational registers from live SukoonOS data."
-        action={<button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white">Create report</button>}
+        action={<DeferredAction label="Coming in Milestone 5" />}
       />
       <section className="grid gap-4 lg:grid-cols-2">
         {reports.map((report) => (

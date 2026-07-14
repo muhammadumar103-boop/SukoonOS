@@ -2,6 +2,7 @@ import type { Currency, FinanceAccount, FinanceBudget, LocalExpense } from "@/li
 
 export const localWorkspaceStorageKey = "sukoonos.local.workspace.v1";
 export const localWorkspaceSchemaVersion = 1;
+export const localWorkspaceBackupsStorageKey = "sukoonos.local.workspace.backups.v1";
 
 export type LocalTransactionType = "Donation" | "Expense" | "Transfer" | "Refund" | "Fee" | "Adjustment";
 
@@ -115,6 +116,13 @@ export type LocalAuditLogEntry = {
   actor: string;
   createdAt: string;
   metadata: Record<string, unknown>;
+};
+
+export type LocalWorkspaceBackup = {
+  id: string;
+  createdAt: string;
+  reason: string;
+  workspace: LocalWorkspace;
 };
 
 export type LocalWorkspace = {

@@ -1,8 +1,25 @@
 import { PageHeader } from "@/components/data-display/page-header";
+import { DeferredAction } from "@/components/data-display/deferred-action";
+import { LocalWorkspaceBanner } from "@/components/data-display/local-workspace-banner";
 import { StatusBadge } from "@/components/data-display/status-badge";
+import { isDemoMode } from "@/config/runtime";
+import { LocalDonorsManager } from "@/app/(app)/donors/local-donors-manager";
 import { getDonorsPageData } from "@/server/queries/donors";
 
 export default async function DonorsPage() {
+  if (isDemoMode) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Donors CRM"
+          description="Manage local donor records with derived giving history, reminders, and browser persistence in demo mode."
+        />
+        <LocalWorkspaceBanner />
+        <LocalDonorsManager />
+      </div>
+    );
+  }
+
   const { donors, summary } = await getDonorsPageData();
 
   return (
@@ -10,7 +27,7 @@ export default async function DonorsPage() {
       <PageHeader
         title="Donors CRM"
         description="A relationship-first view of donor health, giving history, contacts, and stewardship priority."
-        action={<button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white">Add donor</button>}
+        action={<DeferredAction label="Coming in Milestone 4" />}
       />
       <section className="grid gap-4 xl:grid-cols-4">
         {summary.map((item) => {

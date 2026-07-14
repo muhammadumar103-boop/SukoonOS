@@ -1,4 +1,5 @@
 import { Clock3, LifeBuoy, ShieldCheck, WalletCards } from "lucide-react";
+import { DeferredAction } from "@/components/data-display/deferred-action";
 import { PageHeader } from "@/components/data-display/page-header";
 import { requirePageRole } from "@/server/auth/session";
 import { getSettingsSections } from "@/server/queries/settings";
@@ -28,9 +29,9 @@ export default async function SettingsPage() {
               <div>
                 <h2 className="font-semibold text-slate-950">{section.title}</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">{section.description}</p>
-                <button className="mt-5 h-9 rounded-md border border-emerald-200 px-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50">
-                  Configure
-                </button>
+                <div className="mt-5">
+                  <DeferredAction label="Coming in Milestone 5" />
+                </div>
               </div>
             </div>
           </article>
