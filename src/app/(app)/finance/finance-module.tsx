@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowDownLeft,
@@ -24,12 +24,8 @@ import {
   defaultUsdToPkrRate,
   expenseCategories,
   formatMoney,
-  localExpenseStorageKey,
-  localFinanceAccountsStorageKey,
-  localFinanceBudgetsStorageKey,
   normalizeFinanceAccount,
   normalizeFinanceBudget,
-  normalizeLocalExpense,
   parseMoney,
   sukoonProjects,
   type AccountKind,
@@ -38,6 +34,8 @@ import {
   type FinanceBudget,
   type LocalExpense,
 } from "@/lib/finance/local-finance";
+import { loadLocalWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
+import type { LocalWorkspace } from "@/lib/local-data/schema";
 import { cn } from "@/lib/utils";
 
 type AccountMovement = {
@@ -195,44 +193,27 @@ export function FinanceModule() {
   const [budgetSearch, setBudgetSearch] = useState("");
   const [accountForm, setAccountForm] = useState<AccountFormState>(emptyAccountForm);
   const [budgetForm, setBudgetForm] = useState<BudgetFormState>(emptyBudgetForm);
+  const workspaceRef = useRef<LocalWorkspace | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const savedAccounts = window.localStorage.getItem(localFinanceAccountsStorageKey);
-    const savedBudgets = window.localStorage.getItem(localFinanceBudgetsStorageKey);
-    const savedExpenses = window.localStorage.getItem(localExpenseStorageKey);
-
-    if (savedAccounts) {
-      try {
-        setAccounts((JSON.parse(savedAccounts) as FinanceAccount[]).map(normalizeFinanceAccount));
-      } catch {
-        setAccounts(defaultFinanceAccounts);
-      }
-    }
-
-    if (savedBudgets) {
-      try {
-        setBudgets((JSON.parse(savedBudgets) as FinanceBudget[]).map(normalizeFinanceBudget));
-      } catch {
-        setBudgets(defaultFinanceBudgets);
-      }
-    }
-
-    if (savedExpenses) {
-      try {
-        setExpenses((JSON.parse(savedExpenses) as LocalExpense[]).map(normalizeLocalExpense));
-      } catch {
-        setExpenses([]);
-      }
-    }
+    const localWorkspace = loadLocalWorkspace();
+    workspaceRef.current = localWorkspace;
+    setAccounts(localWorkspace.financeAccounts);
+    setBudgets(localWorkspace.financeBudgets);
+    setExpenses(localWorkspace.expenses);
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(localFinanceAccountsStorageKey, JSON.stringify(accounts));
-  }, [accounts]);
+    if (!hydrated) {
+      return;
+    }
 
-  useEffect(() => {
-    window.localStorage.setItem(localFinanceBudgetsStorageKey, JSON.stringify(budgets));
-  }, [budgets]);
+    if (workspaceRef.current) {
+      workspaceRef.current = saveLocalWorkspace({ ...workspaceRef.current, financeAccounts: accounts, financeBudgets: budgets, expenses });
+    }
+  }, [accounts, budgets, expenses, hydrated]);
 
   const movements = useMemo(() => buildMovements(expenses), [expenses]);
 

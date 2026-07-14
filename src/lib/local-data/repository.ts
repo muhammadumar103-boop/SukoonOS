@@ -40,6 +40,12 @@ function readLegacyCollections(storage: BrowserStorage) {
   };
 }
 
+function syncLegacyCollections(storage: BrowserStorage, workspace: LocalWorkspace) {
+  storage.setItem(localExpenseStorageKey, JSON.stringify(workspace.expenses));
+  storage.setItem(localFinanceAccountsStorageKey, JSON.stringify(workspace.financeAccounts));
+  storage.setItem(localFinanceBudgetsStorageKey, JSON.stringify(workspace.financeBudgets));
+}
+
 export function loadLocalWorkspace(storage: BrowserStorage | null = browserStorage()): LocalWorkspace {
   if (!storage) {
     return createSampleWorkspace();
@@ -50,6 +56,7 @@ export function loadLocalWorkspace(storage: BrowserStorage | null = browserStora
   const workspace = existing ? migrateLocalWorkspace(existing, legacy) : createSampleWorkspace(legacy);
 
   storage.setItem(localWorkspaceStorageKey, JSON.stringify(workspace));
+  syncLegacyCollections(storage, workspace);
   return workspace;
 }
 
@@ -59,13 +66,21 @@ export function saveLocalWorkspace(workspace: LocalWorkspace, storage: BrowserSt
     updatedAt: new Date().toISOString(),
   });
 
-  storage?.setItem(localWorkspaceStorageKey, JSON.stringify(nextWorkspace));
+  if (storage) {
+    storage.setItem(localWorkspaceStorageKey, JSON.stringify(nextWorkspace));
+    syncLegacyCollections(storage, nextWorkspace);
+  }
+
   return nextWorkspace;
 }
 
 export function resetLocalWorkspace(options: { sampleData: boolean }, storage: BrowserStorage | null = browserStorage()) {
   const workspace = options.sampleData ? createSampleWorkspace() : createEmptyWorkspace();
-  storage?.setItem(localWorkspaceStorageKey, JSON.stringify(workspace));
+  if (storage) {
+    storage.setItem(localWorkspaceStorageKey, JSON.stringify(workspace));
+    syncLegacyCollections(storage, workspace);
+  }
+
   return workspace;
 }
 

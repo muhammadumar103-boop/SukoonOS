@@ -87,9 +87,9 @@ export function createSampleWorkspace(legacy: LegacyCollections = {}): LocalWork
 export function migrateLocalWorkspace(input: unknown, legacy: LegacyCollections = {}): LocalWorkspace {
   const timestamp = nowIso();
   const candidate = (input && typeof input === "object" ? input : {}) as LegacyLocalWorkspaceInput;
-  const existingExpenses = candidate.expenses?.length ? candidate.expenses : legacy.expenses;
-  const existingAccounts = candidate.financeAccounts?.length ? candidate.financeAccounts : candidate.accounts ?? legacy.financeAccounts;
-  const existingBudgets = candidate.financeBudgets?.length ? candidate.financeBudgets : candidate.budgets ?? legacy.financeBudgets;
+  const existingExpenses = legacy.expenses ?? candidate.expenses;
+  const existingAccounts = legacy.financeAccounts ?? candidate.financeAccounts ?? candidate.accounts;
+  const existingBudgets = legacy.financeBudgets ?? candidate.financeBudgets ?? candidate.budgets;
 
   return {
     schemaVersion: localWorkspaceSchemaVersion,

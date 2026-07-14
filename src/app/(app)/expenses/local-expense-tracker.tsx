@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Pencil, Search, Trash2 } from "lucide-react";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import {
@@ -20,8 +20,10 @@ import {
   sukoonProjects,
   type ApprovalStatus,
   type Currency,
+  type FinanceAccount,
   type LocalExpense,
 } from "@/lib/finance/local-finance";
+import { loadLocalWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
 import { cn } from "@/lib/utils";
 
 type InitialExpense = {
@@ -151,15 +153,27 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [projectFilter, setProjectFilter] = useState("All");
   const [hydrated, setHydrated] = useState(false);
+  const workspaceRef = useRef<ReturnType<typeof loadLocalWorkspace> | null>(null);
+  const [accounts, setAccounts] = useState<FinanceAccount[]>([]);
 
   useEffect(() => {
+    const localWorkspace = loadLocalWorkspace();
+    workspaceRef.current = localWorkspace;
+    setAccounts(localWorkspace.financeAccounts);
+
+    if (localWorkspace.expenses.length) {
+      setExpenses(localWorkspace.expenses.map(normalizeLocalExpense));
+      setHydrated(true);
+      return;
+    }
+
     const saved = window.localStorage.getItem(localExpenseStorageKey);
 
     if (saved) {
       try {
         const normalized = (JSON.parse(saved) as LocalExpense[]).map(normalizeLocalExpense);
         setExpenses(normalized);
-        window.localStorage.setItem(localExpenseStorageKey, JSON.stringify(normalized));
+        workspaceRef.current = saveLocalWorkspace({ ...localWorkspace, expenses: normalized });
         setHydrated(true);
         return;
       } catch {
@@ -167,13 +181,18 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
       }
     }
 
-    setExpenses(initialExpenses.length ? initialExpenses.map(normalizeInitialExpense) : demoExpenses.map(normalizeLocalExpense));
+    const seededExpenses = initialExpenses.length ? initialExpenses.map(normalizeInitialExpense) : demoExpenses.map(normalizeLocalExpense);
+    setExpenses(seededExpenses);
+    workspaceRef.current = saveLocalWorkspace({ ...localWorkspace, expenses: seededExpenses, sampleDataEnabled: true });
     setHydrated(true);
   }, [initialExpenses]);
 
   useEffect(() => {
     if (hydrated) {
       window.localStorage.setItem(localExpenseStorageKey, JSON.stringify(expenses));
+      if (workspaceRef.current) {
+        workspaceRef.current = saveLocalWorkspace({ ...workspaceRef.current, expenses });
+      }
     }
   }, [expenses, hydrated]);
 
@@ -230,6 +249,22 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
 
   function updateForm<Key extends keyof typeof form>(key: Key, value: (typeof form)[Key]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateOriginalCurrency(currency: Currency) {
+    setForm((current) => ({
+      ...current,
+      originalCurrency: currency,
+      fundingAccountId: defaultFundingAccountId(current.paymentMethod, currency),
+    }));
+  }
+
+  function updatePaymentMethod(paymentMethod: string) {
+    setForm((current) => ({
+      ...current,
+      paymentMethod,
+      fundingAccountId: defaultFundingAccountId(paymentMethod, current.originalCurrency),
+    }));
   }
 
   function resetForm() {
@@ -366,7 +401,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
             />
           </Field>
           <Field label="Original currency">
-            <select className={inputClass} onChange={(event) => updateForm("originalCurrency", event.target.value as Currency)} value={form.originalCurrency}>
+            <select className={inputClass} onChange={(event) => updateOriginalCurrency(event.target.value as Currency)} value={form.originalCurrency}>
               <option value="PKR">PKR</option>
               <option value="USD">USD</option>
             </select>
@@ -411,12 +446,23 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
             </select>
           </Field>
           <Field label="Payment method">
-            <select className={inputClass} onChange={(event) => updateForm("paymentMethod", event.target.value)} value={form.paymentMethod}>
+            <select className={inputClass} onChange={(event) => updatePaymentMethod(event.target.value)} value={form.paymentMethod}>
               {paymentMethods.map((method) => (
                 <option key={method} value={method}>
                   {method}
                 </option>
               ))}
+            </select>
+          </Field>
+          <Field label="Funding account">
+            <select className={inputClass} onChange={(event) => updateForm("fundingAccountId", event.target.value)} value={form.fundingAccountId}>
+              {accounts
+                .filter((account) => account.currency === form.originalCurrency)
+                .map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
             </select>
           </Field>
           <Field label="Paid by">
