@@ -5,8 +5,9 @@ export type ApprovalStatus = "Draft" | "Pending" | "Approved" | "Paid" | "Reject
 export type LocalExpense = {
   id: string;
   date: string;
-  amount: number;
-  currency: Currency;
+  originalAmount: number;
+  originalCurrency: Currency;
+  exchangeRate: number;
   category: string;
   project: string;
   description: string;
@@ -18,6 +19,8 @@ export type LocalExpense = {
 };
 
 export const localExpenseStorageKey = "sukoonos.local.expenses.v1";
+
+export const defaultUsdToPkrRate = 278;
 
 export const expenseCategories = [
   "Transportation",
@@ -76,11 +79,32 @@ export function normalizeSukoonProject(project: string) {
   return sukoonProjects.includes(normalized) ? normalized : "General Operations";
 }
 
-export function normalizeLocalExpense(expense: LocalExpense): LocalExpense {
+type LegacyLocalExpense = Partial<LocalExpense> & {
+  amount?: number;
+  currency?: Currency;
+};
+
+export function normalizeLocalExpense(expense: LegacyLocalExpense): LocalExpense {
+  const {
+    amount: _legacyAmount,
+    currency: _legacyCurrency,
+    ...currentExpense
+  } = expense;
+
   return {
-    ...expense,
-    category: normalizeExpenseCategory(expense.category),
-    project: normalizeSukoonProject(expense.project),
+    id: currentExpense.id ?? `expense-${Date.now()}`,
+    date: currentExpense.date ?? new Date().toISOString().slice(0, 10),
+    originalAmount: Number(currentExpense.originalAmount ?? _legacyAmount ?? 0),
+    originalCurrency: currentExpense.originalCurrency ?? _legacyCurrency ?? "PKR",
+    exchangeRate: Number(currentExpense.exchangeRate ?? defaultUsdToPkrRate),
+    category: normalizeExpenseCategory(currentExpense.category ?? "Other"),
+    project: normalizeSukoonProject(currentExpense.project ?? "General Operations"),
+    description: currentExpense.description ?? "",
+    paymentMethod: currentExpense.paymentMethod ?? paymentMethods[0],
+    paidBy: currentExpense.paidBy ?? "",
+    receiptReference: currentExpense.receiptReference ?? "",
+    approvalStatus: currentExpense.approvalStatus ?? "Pending",
+    notes: currentExpense.notes ?? "",
   };
 }
 
@@ -90,4 +114,33 @@ export function formatMoney(amount: number, currency: Currency) {
     currency,
     maximumFractionDigits: currency === "PKR" ? 0 : 2,
   }).format(amount);
+}
+
+export function convertedExpenseAmounts(expense: Pick<LocalExpense, "originalAmount" | "originalCurrency" | "exchangeRate">) {
+  const rate = expense.exchangeRate > 0 ? expense.exchangeRate : defaultUsdToPkrRate;
+
+  if (expense.originalCurrency === "PKR") {
+    return {
+      pkr: expense.originalAmount,
+      usd: expense.originalAmount / rate,
+      convertedCurrency: "USD" as const,
+      convertedAmount: expense.originalAmount / rate,
+    };
+  }
+
+  return {
+    pkr: expense.originalAmount * rate,
+    usd: expense.originalAmount,
+    convertedCurrency: "PKR" as const,
+    convertedAmount: expense.originalAmount * rate,
+  };
+}
+
+export function originalExpenseLabel(expense: Pick<LocalExpense, "originalAmount" | "originalCurrency">) {
+  return formatMoney(expense.originalAmount, expense.originalCurrency);
+}
+
+export function convertedExpenseLabel(expense: Pick<LocalExpense, "originalAmount" | "originalCurrency" | "exchangeRate">) {
+  const amounts = convertedExpenseAmounts(expense);
+  return formatMoney(amounts.convertedAmount, amounts.convertedCurrency);
 }

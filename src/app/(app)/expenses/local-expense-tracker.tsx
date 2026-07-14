@@ -5,12 +5,16 @@ import { Download, Pencil, Search, Trash2 } from "lucide-react";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import {
   approvalStatuses,
+  convertedExpenseAmounts,
+  convertedExpenseLabel,
+  defaultUsdToPkrRate,
   expenseCategories,
   formatMoney,
   localExpenseStorageKey,
   normalizeExpenseCategory,
   normalizeLocalExpense,
   normalizeSukoonProject,
+  originalExpenseLabel,
   paymentMethods,
   sukoonProjects,
   type ApprovalStatus,
@@ -36,8 +40,9 @@ const demoExpenses: LocalExpense[] = [
   {
     id: "local-expense-1",
     date: "2026-07-11",
-    amount: 415000,
-    currency: "PKR",
+    originalAmount: 415000,
+    originalCurrency: "PKR",
+    exchangeRate: 278,
     category: "Medical Supplies",
     project: "Hospital Project",
     description: "Emergency medicine procurement",
@@ -50,8 +55,9 @@ const demoExpenses: LocalExpense[] = [
   {
     id: "local-expense-2",
     date: "2026-07-09",
-    amount: 9450,
-    currency: "USD",
+    originalAmount: 9450,
+    originalCurrency: "USD",
+    exchangeRate: 279.5,
     category: "Office Supplies",
     project: "Orphan Sponsorship",
     description: "School books and stationery",
@@ -64,8 +70,9 @@ const demoExpenses: LocalExpense[] = [
   {
     id: "local-expense-3",
     date: "2026-07-06",
-    amount: 680000,
-    currency: "PKR",
+    originalAmount: 680000,
+    originalCurrency: "PKR",
+    exchangeRate: 277,
     category: "Food",
     project: "Food Parcels",
     description: "Food parcel packaging and staples",
@@ -79,8 +86,9 @@ const demoExpenses: LocalExpense[] = [
 
 const emptyForm: Omit<LocalExpense, "id"> = {
   date: new Date().toISOString().slice(0, 10),
-  amount: 0,
-  currency: "PKR",
+  originalAmount: 0,
+  originalCurrency: "PKR",
+  exchangeRate: defaultUsdToPkrRate,
   category: expenseCategories[0],
   project: sukoonProjects[0],
   description: "",
@@ -108,8 +116,9 @@ function normalizeInitialExpense(expense: InitialExpense, index: number): LocalE
   return {
     id: expense.id,
     date: new Date(Date.now() - index * 86400000).toISOString().slice(0, 10),
-    amount: parseCurrencyAmount(expense.amount),
-    currency: expense.amount.includes("$") ? "USD" : "PKR",
+    originalAmount: parseCurrencyAmount(expense.amount),
+    originalCurrency: expense.amount.includes("$") ? "USD" : "PKR",
+    exchangeRate: defaultUsdToPkrRate,
     category: normalizeExpenseCategory(expense.category),
     project: normalizeSukoonProject(expense.project),
     description: expense.vendor,
@@ -168,6 +177,8 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
     return expenses.filter((expense) => {
       const searchable = [
         expense.date,
+        expense.originalCurrency,
+        expense.exchangeRate,
         expense.category,
         expense.project,
         expense.description,
@@ -182,7 +193,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
 
       return (
         (!query || searchable.includes(query)) &&
-        (currencyFilter === "All" || expense.currency === currencyFilter) &&
+        (currencyFilter === "All" || expense.originalCurrency === currencyFilter) &&
         (statusFilter === "All" || expense.approvalStatus === statusFilter) &&
         (categoryFilter === "All" || expense.category === categoryFilter) &&
         (projectFilter === "All" || expense.project === projectFilter)
@@ -196,10 +207,13 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
 
     return expenses.reduce(
       (result, expense) => {
-        result[expense.currency] += expense.amount;
+        const amounts = convertedExpenseAmounts(expense);
+        result.PKR += amounts.pkr;
+        result.USD += amounts.usd;
 
         if (expense.date.startsWith(currentMonth)) {
-          result.month[expense.currency] += expense.amount;
+          result.month.PKR += amounts.pkr;
+          result.month.USD += amounts.usd;
         }
 
         return result;
@@ -223,7 +237,8 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
     const nextExpense: LocalExpense = {
       id: editingId ?? createId(),
       ...form,
-      amount: Number(form.amount),
+      originalAmount: Number(form.originalAmount),
+      exchangeRate: Number(form.exchangeRate),
     };
 
     setExpenses((current) => {
@@ -240,8 +255,9 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
   function editExpense(expense: LocalExpense) {
     setForm({
       date: expense.date,
-      amount: expense.amount,
-      currency: expense.currency,
+      originalAmount: expense.originalAmount,
+      originalCurrency: expense.originalCurrency,
+      exchangeRate: expense.exchangeRate,
       category: expense.category,
       project: expense.project,
       description: expense.description,
@@ -264,8 +280,13 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
   function exportCsv() {
     const headers = [
       "Date",
-      "Amount",
-      "Currency",
+      "Original Amount",
+      "Original Currency",
+      "Exchange Rate (PKR per USD)",
+      "Converted Amount",
+      "Converted Currency",
+      "PKR Value",
+      "USD Value",
       "Category",
       "Project",
       "Description",
@@ -275,19 +296,27 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
       "Approval Status",
       "Notes",
     ];
-    const rows = filteredExpenses.map((expense) => [
-      expense.date,
-      expense.amount,
-      expense.currency,
-      expense.category,
-      expense.project,
-      expense.description,
-      expense.paymentMethod,
-      expense.paidBy,
-      expense.receiptReference,
-      expense.approvalStatus,
-      expense.notes,
-    ]);
+    const rows = filteredExpenses.map((expense) => {
+      const amounts = convertedExpenseAmounts(expense);
+      return [
+        expense.date,
+        expense.originalAmount,
+        expense.originalCurrency,
+        expense.exchangeRate,
+        amounts.convertedAmount,
+        amounts.convertedCurrency,
+        amounts.pkr,
+        amounts.usd,
+        expense.category,
+        expense.project,
+        expense.description,
+        expense.paymentMethod,
+        expense.paidBy,
+        expense.receiptReference,
+        expense.approvalStatus,
+        expense.notes,
+      ];
+    });
     const csv = [headers, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -302,10 +331,10 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
   return (
     <div className="space-y-6">
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="PKR total" value={formatMoney(totals.PKR, "PKR")} />
-        <SummaryCard label="USD total" value={formatMoney(totals.USD, "USD")} />
-        <SummaryCard label="This month PKR" value={formatMoney(totals.month.PKR, "PKR")} />
-        <SummaryCard label="This month USD" value={formatMoney(totals.month.USD, "USD")} />
+        <SummaryCard label="PKR total (all expenses)" value={formatMoney(totals.PKR, "PKR")} />
+        <SummaryCard label="USD total (all expenses)" value={formatMoney(totals.USD, "USD")} />
+        <SummaryCard label="This month PKR value" value={formatMoney(totals.month.PKR, "PKR")} />
+        <SummaryCard label="This month USD value" value={formatMoney(totals.month.USD, "USD")} />
       </section>
 
       <section className="rounded-lg border border-emerald-100 bg-white p-5 shadow-sm shadow-emerald-950/5">
@@ -318,22 +347,34 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
           <Field label="Date">
             <input className={inputClass} onChange={(event) => updateForm("date", event.target.value)} required type="date" value={form.date} />
           </Field>
-          <Field label="Amount">
+          <Field label="Original amount">
             <input
               className={inputClass}
               min="0"
-              onChange={(event) => updateForm("amount", Number(event.target.value))}
+              onChange={(event) => updateForm("originalAmount", Number(event.target.value))}
               required
               step="0.01"
               type="number"
-              value={form.amount}
+              value={form.originalAmount}
             />
           </Field>
-          <Field label="Currency">
-            <select className={inputClass} onChange={(event) => updateForm("currency", event.target.value as Currency)} value={form.currency}>
+          <Field label="Original currency">
+            <select className={inputClass} onChange={(event) => updateForm("originalCurrency", event.target.value as Currency)} value={form.originalCurrency}>
               <option value="PKR">PKR</option>
               <option value="USD">USD</option>
             </select>
+          </Field>
+          <Field label="Exchange rate">
+            <input
+              className={inputClass}
+              min="0.0001"
+              onChange={(event) => updateForm("exchangeRate", Number(event.target.value))}
+              required
+              step="0.0001"
+              type="number"
+              value={form.exchangeRate}
+            />
+            <span className="mt-1 block text-xs text-slate-500">PKR per 1 USD. Edit per transaction for historical rates.</span>
           </Field>
           <Field label="Approval status">
             <select className={inputClass} onChange={(event) => updateForm("approvalStatus", event.target.value as ApprovalStatus)} value={form.approvalStatus}>
@@ -413,7 +454,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
             />
           </div>
           <select className={inputClass} onChange={(event) => setCurrencyFilter(event.target.value as "All" | Currency)} value={currencyFilter}>
-            <option value="All">All currencies</option>
+            <option value="All">All original currencies</option>
             <option value="PKR">PKR</option>
             <option value="USD">USD</option>
           </select>
@@ -462,7 +503,9 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
                 <th className="px-5 py-3 font-semibold">Description</th>
                 <th className="px-5 py-3 font-semibold">Category</th>
                 <th className="px-5 py-3 font-semibold">Project</th>
-                <th className="px-5 py-3 font-semibold">Amount</th>
+                <th className="px-5 py-3 font-semibold">Original amount</th>
+                <th className="px-5 py-3 font-semibold">Converted amount</th>
+                <th className="px-5 py-3 font-semibold">Rate</th>
                 <th className="px-5 py-3 font-semibold">Paid by</th>
                 <th className="px-5 py-3 font-semibold">Receipt</th>
                 <th className="px-5 py-3 font-semibold">Status</th>
@@ -470,7 +513,10 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredExpenses.map((expense) => (
+              {filteredExpenses.map((expense) => {
+                const amounts = convertedExpenseAmounts(expense);
+
+                return (
                 <tr key={expense.id} className="align-top">
                   <td className="px-5 py-4 text-slate-500">{expense.date}</td>
                   <td className="px-5 py-4">
@@ -479,7 +525,15 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
                   </td>
                   <td className="px-5 py-4 text-slate-500">{expense.category}</td>
                   <td className="px-5 py-4 text-slate-500">{expense.project}</td>
-                  <td className="px-5 py-4 font-semibold text-slate-950">{formatMoney(expense.amount, expense.currency)}</td>
+                  <td className="px-5 py-4">
+                    <p className="font-semibold text-slate-950">{originalExpenseLabel(expense)}</p>
+                    <p className="mt-1 text-xs text-slate-500">Original {expense.originalCurrency}</p>
+                  </td>
+                  <td className="px-5 py-4">
+                    <p className="font-semibold text-slate-950">{convertedExpenseLabel(expense)}</p>
+                    <p className="mt-1 text-xs text-slate-500">Converted {amounts.convertedCurrency}</p>
+                  </td>
+                  <td className="px-5 py-4 text-slate-500">{expense.exchangeRate.toLocaleString("en-US")} PKR/USD</td>
                   <td className="px-5 py-4 text-slate-500">{expense.paidBy || "Not set"}</td>
                   <td className="px-5 py-4 text-slate-500">{expense.receiptReference || "None"}</td>
                   <td className="px-5 py-4">
@@ -506,10 +560,11 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {!filteredExpenses.length ? (
                 <tr>
-                  <td className="px-5 py-8 text-center text-slate-500" colSpan={9}>
+                  <td className="px-5 py-8 text-center text-slate-500" colSpan={11}>
                     No expenses match the current filters.
                   </td>
                 </tr>

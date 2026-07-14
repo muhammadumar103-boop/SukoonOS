@@ -5,6 +5,8 @@ import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Banknote, Search } from "l
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { demoDonationsPageData, demoTransfers } from "@/data/demo-data";
 import {
+  convertedExpenseAmounts,
+  defaultUsdToPkrRate,
   formatMoney,
   localExpenseStorageKey,
   normalizeLocalExpense,
@@ -25,8 +27,13 @@ type LedgerEntry = {
   method: string;
   reference: string;
   status: string;
-  currency: Currency;
-  amount: number;
+  originalCurrency: Currency;
+  originalAmount: number;
+  exchangeRate: number;
+  pkrAmount: number;
+  usdAmount: number;
+  convertedLabel: string;
+  originalLabel: string;
 };
 
 const typeStyles: Record<LedgerType, string> = {
@@ -58,8 +65,13 @@ const staticLedgerEntries: LedgerEntry[] = [
     method: donation.method,
     reference: `DON-${String(index + 1).padStart(4, "0")}`,
     status: donation.status,
-    currency: "USD" as const,
-    amount: parseMoney(donation.amount),
+    originalCurrency: "USD" as const,
+    originalAmount: parseMoney(donation.amount),
+    exchangeRate: defaultUsdToPkrRate,
+    pkrAmount: parseMoney(donation.amount) * defaultUsdToPkrRate,
+    usdAmount: parseMoney(donation.amount),
+    originalLabel: formatMoney(parseMoney(donation.amount), "USD"),
+    convertedLabel: formatMoney(parseMoney(donation.amount) * defaultUsdToPkrRate, "PKR"),
   })),
   ...demoTransfers.map((transfer, index) => ({
     id: `ledger-${transfer.id}`,
@@ -71,8 +83,13 @@ const staticLedgerEntries: LedgerEntry[] = [
     method: "Internal Transfer",
     reference: `TRF-${String(index + 1).padStart(4, "0")}`,
     status: transfer.status,
-    currency: "USD" as const,
-    amount: 0,
+    originalCurrency: "USD" as const,
+    originalAmount: 0,
+    exchangeRate: defaultUsdToPkrRate,
+    pkrAmount: 0,
+    usdAmount: 0,
+    originalLabel: formatMoney(0, "USD"),
+    convertedLabel: formatMoney(0, "PKR"),
   })),
   {
     id: "ledger-refund-1",
@@ -84,8 +101,13 @@ const staticLedgerEntries: LedgerEntry[] = [
     method: "Bank Transfer",
     reference: "REF-1021",
     status: "Received",
-    currency: "PKR",
-    amount: 85000,
+    originalCurrency: "PKR",
+    originalAmount: 85000,
+    exchangeRate: 278,
+    pkrAmount: 85000,
+    usdAmount: 85000 / 278,
+    originalLabel: formatMoney(85000, "PKR"),
+    convertedLabel: formatMoney(85000 / 278, "USD"),
   },
   {
     id: "ledger-fee-1",
@@ -97,8 +119,13 @@ const staticLedgerEntries: LedgerEntry[] = [
     method: "Bank Transfer",
     reference: "FEE-3308",
     status: "Paid",
-    currency: "PKR",
-    amount: -2600,
+    originalCurrency: "PKR",
+    originalAmount: -2600,
+    exchangeRate: 278,
+    pkrAmount: -2600,
+    usdAmount: -2600 / 278,
+    originalLabel: formatMoney(-2600, "PKR"),
+    convertedLabel: formatMoney(-2600 / 278, "USD"),
   },
   {
     id: "ledger-other-1",
@@ -110,8 +137,13 @@ const staticLedgerEntries: LedgerEntry[] = [
     method: "Adjustment",
     reference: "ADJ-0001",
     status: "Approved",
-    currency: "USD",
-    amount: 15000,
+    originalCurrency: "USD",
+    originalAmount: 15000,
+    exchangeRate: defaultUsdToPkrRate,
+    pkrAmount: 15000 * defaultUsdToPkrRate,
+    usdAmount: 15000,
+    originalLabel: formatMoney(15000, "USD"),
+    convertedLabel: formatMoney(15000 * defaultUsdToPkrRate, "PKR"),
   },
 ];
 
@@ -130,6 +162,9 @@ function isoDateFromDemoDate(value: string, fallbackOffset: number) {
 }
 
 function localExpenseToLedger(expense: LocalExpense): LedgerEntry {
+  const amounts = convertedExpenseAmounts(expense);
+  const sign = -1;
+
   return {
     id: `ledger-${expense.id}`,
     date: expense.date,
@@ -140,8 +175,13 @@ function localExpenseToLedger(expense: LocalExpense): LedgerEntry {
     method: expense.paymentMethod,
     reference: expense.receiptReference || "No receipt",
     status: expense.approvalStatus,
-    currency: expense.currency,
-    amount: -Math.abs(expense.amount),
+    originalCurrency: expense.originalCurrency,
+    originalAmount: sign * Math.abs(expense.originalAmount),
+    exchangeRate: expense.exchangeRate,
+    pkrAmount: sign * Math.abs(amounts.pkr),
+    usdAmount: sign * Math.abs(amounts.usd),
+    originalLabel: formatMoney(sign * Math.abs(expense.originalAmount), expense.originalCurrency),
+    convertedLabel: formatMoney(sign * Math.abs(amounts.convertedAmount), amounts.convertedCurrency),
   };
 }
 
@@ -186,7 +226,10 @@ export function FinanceLedger() {
         entry.method,
         entry.reference,
         entry.status,
-        entry.currency,
+        entry.originalCurrency,
+        entry.exchangeRate,
+        entry.originalLabel,
+        entry.convertedLabel,
       ]
         .join(" ")
         .toLowerCase();
@@ -194,7 +237,7 @@ export function FinanceLedger() {
       return (
         (!query || searchable.includes(query)) &&
         (typeFilter === "All" || entry.type === typeFilter) &&
-        (currencyFilter === "All" || entry.currency === currencyFilter) &&
+        (currencyFilter === "All" || entry.originalCurrency === currencyFilter) &&
         (projectFilter === "All" || entry.project === projectFilter)
       );
     });
@@ -203,7 +246,8 @@ export function FinanceLedger() {
   const totals = useMemo(() => {
     return filteredEntries.reduce(
       (result, entry) => {
-        result[entry.currency] += entry.amount;
+        result.PKR += entry.pkrAmount;
+        result.USD += entry.usdAmount;
         return result;
       },
       { PKR: 0, USD: 0 },
@@ -238,7 +282,7 @@ export function FinanceLedger() {
             ))}
           </select>
           <select className={inputClass} onChange={(event) => setCurrencyFilter(event.target.value as "All" | Currency)} value={currencyFilter}>
-            <option value="All">All currencies</option>
+            <option value="All">All original currencies</option>
             <option value="PKR">PKR</option>
             <option value="USD">USD</option>
           </select>
@@ -264,7 +308,10 @@ export function FinanceLedger() {
                 <th className="px-5 py-3 font-semibold">Method</th>
                 <th className="px-5 py-3 font-semibold">Reference</th>
                 <th className="px-5 py-3 font-semibold">Status</th>
-                <th className="px-5 py-3 text-right font-semibold">Amount</th>
+                <th className="px-5 py-3 text-right font-semibold">Original amount</th>
+                <th className="px-5 py-3 text-right font-semibold">Converted amount</th>
+                <th className="px-5 py-3 text-right font-semibold">PKR value</th>
+                <th className="px-5 py-3 text-right font-semibold">USD value</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -287,15 +334,26 @@ export function FinanceLedger() {
                     <td className="px-5 py-4">
                       <StatusBadge value={entry.status} />
                     </td>
-                    <td className={cn("px-5 py-4 text-right font-semibold", entry.amount < 0 ? "text-red-700" : "text-emerald-700")}>
-                      {formatMoney(entry.amount, entry.currency)}
+                    <td className={cn("px-5 py-4 text-right", entry.originalAmount < 0 ? "text-red-700" : "text-emerald-700")}>
+                      <p className="font-semibold">{entry.originalLabel}</p>
+                      <p className="mt-1 text-xs text-slate-500">Original {entry.originalCurrency}</p>
+                    </td>
+                    <td className={cn("px-5 py-4 text-right", entry.pkrAmount < 0 || entry.usdAmount < 0 ? "text-red-700" : "text-emerald-700")}>
+                      <p className="font-semibold">{entry.convertedLabel}</p>
+                      <p className="mt-1 text-xs text-slate-500">{entry.exchangeRate.toLocaleString("en-US")} PKR/USD</p>
+                    </td>
+                    <td className={cn("px-5 py-4 text-right font-semibold", entry.pkrAmount < 0 ? "text-red-700" : "text-emerald-700")}>
+                      {formatMoney(entry.pkrAmount, "PKR")}
+                    </td>
+                    <td className={cn("px-5 py-4 text-right font-semibold", entry.usdAmount < 0 ? "text-red-700" : "text-emerald-700")}>
+                      {formatMoney(entry.usdAmount, "USD")}
                     </td>
                   </tr>
                 );
               })}
               {!filteredEntries.length ? (
                 <tr>
-                  <td className="px-5 py-8 text-center text-slate-500" colSpan={9}>
+                  <td className="px-5 py-8 text-center text-slate-500" colSpan={12}>
                     No ledger entries match the current filters.
                   </td>
                 </tr>
