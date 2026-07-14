@@ -4,57 +4,53 @@ This roadmap is intentionally high-level until product discovery is complete.
 
 ## Phase 0: Foundation
 
-Status: In progress
+Status: Complete
 
 - Initialize Next.js 15 project foundation.
 - Configure TypeScript, Tailwind CSS, and shadcn/ui.
 - Add Supabase client structure.
 - Add Prisma datasource structure.
 - Create project documentation.
-- Wait for approval before building application pages.
+- Add demo mode and local runnable app behavior.
 
-## Phase 1: Discovery And Modeling
+## Phase 1: Local MVP Architecture
 
-Status: Not started
+Status: In progress
 
-- Confirm user roles and access levels.
-- Identify the first operational workflow.
-- Define core data entities.
-- Decide authentication and onboarding rules.
-- Draft audit and privacy requirements.
+- Preserve local expense tracking and finance ledger behavior.
+- Define shared financial types and local data migrations.
+- Create the local workspace repository.
+- Document production migration needs.
+- Keep Prisma/Supabase integration intact.
 
-## Phase 2: First Internal Workflow
-
-Status: Not started
-
-Possible candidates:
-
-- Case intake
-- Donor registry
-- Donation tracking
-- Volunteer registry
-- Program operations
-- Internal admin console
-
-Only one workflow should be selected for the first build.
-
-## Phase 3: Operational Backbone
+## Phase 2: Finance MVP
 
 Status: Not started
 
-- Role-based access control.
-- Activity history and audit logs.
-- Search and filtering.
-- Reporting foundations.
-- Data import and export tools.
+- Donations, expenses, transfers, accounts, cash, budgets, ledger, balances, and exports.
+- All totals derived from transactions.
+- Demo-mode writes persisted locally.
 
-## Phase 4: Scale And Governance
+## Phase 3: Projects And Donor CRM
 
 Status: Not started
 
-- Advanced reporting.
-- Approval workflows.
-- Notifications.
-- Multi-program support.
-- Data retention policies.
-- Security review.
+- Project records with linked finance activity, timelines, placeholders, and completion reports.
+- Donor CRM with lifetime giving, receipts, update history, and reminders.
+
+## Phase 4: Tasks, Approvals, Dashboard, Reports
+
+Status: Not started
+
+- Approval queue and staff tasks.
+- Dashboard derived from local repository data.
+- Reports with filters and CSV export.
+
+## Phase 5: Production Migration
+
+Status: Not started
+
+- Non-destructive Prisma migrations for MVP entities.
+- Supabase Auth and role migration.
+- Row-level security review.
+- Production audit log verification.

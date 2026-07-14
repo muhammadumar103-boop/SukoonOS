@@ -6,7 +6,7 @@ Prisma is included because the project is expected to need typed relational mode
 
 ## Current Status
 
-Sprint 3 defines the first production schema for SukoonOS.
+Sprint 3 defines the first production schema for SukoonOS. The local MVP has grown beyond this initial schema, so the Prisma schema should be treated as a production foundation rather than the final MVP data model.
 
 The Prisma schema now includes:
 
@@ -18,6 +18,8 @@ The Prisma schema now includes:
 - Application settings.
 - Tasks.
 - Activity logs.
+
+The MVP still needs future non-destructive schema additions for dual-currency transaction values, historical exchange rates, generalized ledger entries, funding account references, richer project records, donor CRM reminders, approvals, report definitions, and expanded roles.
 
 ## Environment Variables
 
@@ -38,7 +40,7 @@ The Prisma schema now includes:
 - Use row-level security in Supabase for user-facing data access.
 - Keep service-role operations server-only.
 
-## Role Model
+## Current Role Model
 
 SukoonOS supports three roles:
 
@@ -47,6 +49,17 @@ SukoonOS supports three roles:
 - `VOLUNTEER`: read-only access.
 
 Supabase Auth remains the identity provider. The local `UserProfile` table stores app-specific role, title, active status, and display information.
+
+## Target MVP Role Model
+
+The target MVP role model is:
+
+- `ADMIN`: full access, settings, destructive actions.
+- `FINANCE`: finance records, approvals, reports, account reconciliation.
+- `OPERATIONS`: projects, tasks, donor updates, and expense submission.
+- `VIEWER`: read-only access.
+
+Migrating from the current roles to the target roles requires an explicit, non-destructive migration plan.
 
 ## Runtime Access
 

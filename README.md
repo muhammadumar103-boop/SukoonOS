@@ -6,7 +6,17 @@ This repository is the foundation for a long-term internal platform that will su
 
 ## Current Status
 
-Sprint 3 backend foundation is implemented. Pages are wired through authenticated server-side data loaders and secure API routes, but a real Supabase project must be configured before migrations and runtime verification can be completed.
+SukoonOS is moving toward a local-first MVP for charity operations.
+
+Current working capabilities include:
+
+- Demo mode without Supabase or database credentials.
+- Professional app shell with dashboard, finance, projects, donations, donors, expenses, transfers, reports, and settings routes.
+- Local expense tracker with browser persistence, edit/delete, search, filters, CSV export, dual PKR/USD values, and historical exchange rates.
+- Finance Ledger and Finance module foundations for accounts, cash, budgets, and balances.
+- Prisma/Supabase production foundation preserved for later migration.
+
+The production database schema is not yet the final MVP schema. Do not claim production readiness until real credentials, migrations, auth, and route behavior are tested.
 
 ## Tech Stack
 
@@ -73,6 +83,9 @@ docs/               Supporting project documentation
 
 ## Documentation
 
+- [AGENTS.md](./AGENTS.md)
+- [PLANS.md](./PLANS.md)
+- [ARCHITECTURE.md](./ARCHITECTURE.md)
 - [PROJECT.md](./PROJECT.md)
 - [ROADMAP.md](./ROADMAP.md)
 - [FEATURES.md](./FEATURES.md)

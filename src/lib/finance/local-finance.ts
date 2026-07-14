@@ -36,6 +36,7 @@ export type LocalExpense = {
   exchangeRate: number;
   category: string;
   project: string;
+  fundingAccountId: string;
   description: string;
   paymentMethod: string;
   paidBy: string;
@@ -52,14 +53,14 @@ export const defaultUsdToPkrRate = 278;
 
 export const expenseCategories = [
   "Transportation",
-  "Salaries/Wages",
+  "Salaries and Wages",
   "Utilities",
   "Rent",
   "Food",
   "Medical Supplies",
   "Construction Materials",
   "Fuel",
-  "Bank/Transfer Fees",
+  "Bank and Transfer Fees",
   "Office Supplies",
   "Equipment",
   "Maintenance",
@@ -149,7 +150,7 @@ export const defaultFinanceBudgets: FinanceBudget[] = [
     id: "budget-orphan-support",
     name: "Orphan sponsorship operations",
     project: "Orphan Sponsorship",
-    category: "Salaries/Wages",
+    category: "Salaries and Wages",
     period: "Quarterly",
     currency: "USD",
     amount: 18000,
@@ -174,6 +175,8 @@ const categoryAliases: Record<string, string> = {
   Transport: "Transportation",
   Operations: "Other",
   Emergency: "Other",
+  "Salaries/Wages": "Salaries and Wages",
+  "Bank/Transfer Fees": "Bank and Transfer Fees",
 };
 
 const projectAliases: Record<string, string> = {
@@ -191,6 +194,14 @@ export function normalizeExpenseCategory(category: string) {
 export function normalizeSukoonProject(project: string) {
   const normalized = projectAliases[project] ?? project;
   return sukoonProjects.includes(normalized) ? normalized : "General Operations";
+}
+
+export function defaultFundingAccountId(paymentMethod: string, currency: Currency) {
+  if (paymentMethod === "Cash") {
+    return currency === "PKR" ? "field-cash-pkr" : "petty-cash-usd";
+  }
+
+  return currency === "PKR" ? "operations-bank-pkr" : "main-donations-bank";
 }
 
 type LegacyLocalExpense = Partial<LocalExpense> & {
@@ -213,6 +224,7 @@ export function normalizeLocalExpense(expense: LegacyLocalExpense): LocalExpense
     exchangeRate: Number(currentExpense.exchangeRate ?? defaultUsdToPkrRate),
     category: normalizeExpenseCategory(currentExpense.category ?? "Other"),
     project: normalizeSukoonProject(currentExpense.project ?? "General Operations"),
+    fundingAccountId: currentExpense.fundingAccountId ?? defaultFundingAccountId(currentExpense.paymentMethod ?? paymentMethods[0], currentExpense.originalCurrency ?? _legacyCurrency ?? "PKR"),
     description: currentExpense.description ?? "",
     paymentMethod: currentExpense.paymentMethod ?? paymentMethods[0],
     paidBy: currentExpense.paidBy ?? "",

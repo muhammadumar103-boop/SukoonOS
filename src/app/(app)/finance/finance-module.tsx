@@ -101,6 +101,10 @@ function isoDateFromDemoDate(value: string, fallbackOffset: number) {
 }
 
 function accountForExpense(expense: LocalExpense) {
+  if (expense.fundingAccountId) {
+    return expense.fundingAccountId;
+  }
+
   if (expense.paymentMethod === "Cash") {
     return expense.originalCurrency === "PKR" ? "field-cash-pkr" : "petty-cash-usd";
   }

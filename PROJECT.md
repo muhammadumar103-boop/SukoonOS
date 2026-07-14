@@ -26,13 +26,18 @@ SukoonOS should become a calm, trusted, operational workspace for charity teams.
 - Keep platform integrations under `src/lib`.
 - Keep server-only business workflows under `src/server`.
 
-## Non-Goals For This Foundation Stage
+## Current MVP Direction
 
-- No product pages.
-- No dashboard.
-- No donor, beneficiary, volunteer, or admin workflows.
-- No production database models beyond the initial Prisma datasource.
-- No visual brand system beyond the shadcn/Tailwind baseline.
+SukoonOS is now past the foundation-only stage. The active goal is a usable charity operations MVP with connected finance, projects, donor CRM, tasks, approvals, dashboard, and reports.
+
+The MVP must work fully in local demo mode without credentials, while preserving the Supabase/PostgreSQL architecture for future production migration.
+
+## Non-Goals For The Current MVP
+
+- No destructive production schema changes without explicit approval.
+- No secrets or paid service requirements.
+- No fragile PDF dependencies before report payloads are stable.
+- No claim of production readiness until production auth, migrations, and credentials are tested.
 
 ## Decision Log
 
@@ -43,3 +48,5 @@ SukoonOS should become a calm, trusted, operational workspace for charity teams.
 | 2026-07-11 | Use domain-first feature folders | Charity operations will grow across multiple domains and need clear ownership boundaries. |
 | 2026-07-11 | Use Supabase Auth plus local user profiles | Supabase owns identity while SukoonOS owns app roles, active status, and operational permissions. |
 | 2026-07-11 | Restrict settings to Admin role | Settings can contain sensitive organization and finance configuration. |
+| 2026-07-15 | Preserve local demo mode as a first-class runtime | The MVP must be usable immediately without credentials while production integration remains available. |
+| 2026-07-15 | Introduce a versioned local workspace | Browser data migrations must preserve existing expense records and support future local modules. |
