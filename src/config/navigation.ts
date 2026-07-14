@@ -2,6 +2,7 @@ import {
   ArrowRightLeft,
   BarChart3,
   BriefcaseBusiness,
+  BookOpenText,
   HandCoins,
   LayoutDashboard,
   ReceiptText,
@@ -16,6 +17,7 @@ export const navigationItems = [
   { title: "Donors CRM", href: "/donors", icon: UsersRound },
   { title: "Expenses", href: "/expenses", icon: ReceiptText },
   { title: "Transfers", href: "/transfers", icon: ArrowRightLeft },
+  { title: "Finance Ledger", href: "/finance-ledger", icon: BookOpenText },
   { title: "Reports", href: "/reports", icon: BarChart3 },
   { title: "Settings", href: "/settings", icon: Settings },
 ];

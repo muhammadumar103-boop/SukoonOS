@@ -52,11 +52,11 @@ export const demoDashboardData = {
     { label: "Jul", value: 92 },
   ],
   expenseBreakdown: [
-    { label: "Food Relief", value: 38, color: "bg-emerald-600" },
-    { label: "Medical Aid", value: 24, color: "bg-teal-500" },
-    { label: "Education", value: 18, color: "bg-lime-500" },
-    { label: "Operations", value: 12, color: "bg-slate-500" },
-    { label: "Emergency", value: 8, color: "bg-amber-500" },
+    { label: "Food", value: 38, color: "bg-emerald-600" },
+    { label: "Medical Supplies", value: 24, color: "bg-teal-500" },
+    { label: "Office Supplies", value: 18, color: "bg-lime-500" },
+    { label: "Utilities", value: 12, color: "bg-slate-500" },
+    { label: "Other", value: 8, color: "bg-amber-500" },
   ],
   recentActivity: [
     {
@@ -99,7 +99,7 @@ export const demoDashboardData = {
 export const demoProjects = [
   {
     id: "project-1",
-    name: "Winter Relief 2026",
+    name: "Food Parcels",
     lead: "Mariam Khan",
     budget: "$96,000",
     spent: "$58,400",
@@ -108,7 +108,7 @@ export const demoProjects = [
   },
   {
     id: "project-2",
-    name: "Mobile Medical Camp",
+    name: "Hospital Project",
     lead: "Dr. Sameer Ali",
     budget: "$42,500",
     spent: "$31,900",
@@ -117,7 +117,7 @@ export const demoProjects = [
   },
   {
     id: "project-3",
-    name: "Orphan Education Fund",
+    name: "Orphan Sponsorship",
     lead: "Ayesha Noor",
     budget: "$120,000",
     spent: "$76,200",
@@ -126,7 +126,7 @@ export const demoProjects = [
   },
   {
     id: "project-4",
-    name: "Food Parcel Program",
+    name: "Daily Iftar",
     lead: "Bilal Ahmed",
     budget: "$88,000",
     spent: "$82,400",
@@ -142,10 +142,10 @@ export const demoDonationsPageData = {
     recurringDonors: "312",
   },
   donations: [
-    { id: "donation-1", donor: "Al Noor Group", amount: "$12,500", method: "Bank Transfer", fund: "Winter Relief", date: "Jul 11, 2026", status: "Received" },
-    { id: "donation-2", donor: "Sarah Malik", amount: "$2,000", method: "Card", fund: "Medical Aid", date: "Jul 11, 2026", status: "Received" },
-    { id: "donation-3", donor: "Rahman Family Trust", amount: "$25,000", method: "Cheque", fund: "Education", date: "Jul 10, 2026", status: "Processing" },
-    { id: "donation-4", donor: "Green Crescent LLC", amount: "$8,750", method: "Bank Transfer", fund: "Food Relief", date: "Jul 9, 2026", status: "Received" },
+    { id: "donation-1", donor: "Al Noor Group", amount: "$12,500", method: "Bank Transfer", fund: "Food Parcels", date: "Jul 11, 2026", status: "Received" },
+    { id: "donation-2", donor: "Sarah Malik", amount: "$2,000", method: "Card", fund: "Hospital Project", date: "Jul 11, 2026", status: "Received" },
+    { id: "donation-3", donor: "Rahman Family Trust", amount: "$25,000", method: "Cheque", fund: "Orphan Sponsorship", date: "Jul 10, 2026", status: "Processing" },
+    { id: "donation-4", donor: "Green Crescent LLC", amount: "$8,750", method: "Bank Transfer", fund: "Daily Iftar", date: "Jul 9, 2026", status: "Received" },
   ],
 };
 
@@ -165,16 +165,16 @@ export const demoDonorsPageData = {
 };
 
 export const demoExpenses = [
-  { id: "expense-1", vendor: "City Medical Supplies", category: "Medical Aid", amount: "$14,800", project: "Mobile Medical Camp", status: "Pending" },
-  { id: "expense-2", vendor: "Bright Books Co.", category: "Education", amount: "$9,450", project: "Orphan Education Fund", status: "Approved" },
-  { id: "expense-3", vendor: "Metro Logistics", category: "Transport", amount: "$4,220", project: "Food Parcel Program", status: "Paid" },
-  { id: "expense-4", vendor: "Unity Packaging", category: "Food Relief", amount: "$18,600", project: "Winter Relief 2026", status: "Approved" },
+  { id: "expense-1", vendor: "City Medical Supplies", category: "Medical Supplies", amount: "$14,800", project: "Hospital Project", status: "Pending" },
+  { id: "expense-2", vendor: "Bright Books Co.", category: "Office Supplies", amount: "$9,450", project: "Orphan Sponsorship", status: "Approved" },
+  { id: "expense-3", vendor: "Metro Logistics", category: "Transportation", amount: "$4,220", project: "Food Parcels", status: "Paid" },
+  { id: "expense-4", vendor: "Unity Packaging", category: "Food", amount: "$18,600", project: "Daily Iftar", status: "Approved" },
 ];
 
 export const demoTransfers = [
   { id: "transfer-1", from: "Main Donations", to: "Field Operations", amount: "$18,000", date: "Jul 12, 2026", status: "Scheduled" },
-  { id: "transfer-2", from: "Zakat Fund", to: "Medical Aid", amount: "$22,500", date: "Jul 10, 2026", status: "Completed" },
-  { id: "transfer-3", from: "Education Fund", to: "School Supplies", amount: "$15,000", date: "Jul 8, 2026", status: "Completed" },
+  { id: "transfer-2", from: "Zakat Fund", to: "Hospital Project", amount: "$22,500", date: "Jul 10, 2026", status: "Completed" },
+  { id: "transfer-3", from: "Education Fund", to: "Orphan Sponsorship", amount: "$15,000", date: "Jul 8, 2026", status: "Completed" },
   { id: "transfer-4", from: "Emergency Reserve", to: "Flood Response", amount: "$40,000", date: "Jul 7, 2026", status: "Review" },
 ];
 

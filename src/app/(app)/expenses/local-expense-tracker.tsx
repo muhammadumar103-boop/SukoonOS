@@ -3,25 +3,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Pencil, Search, Trash2 } from "lucide-react";
 import { StatusBadge } from "@/components/data-display/status-badge";
+import {
+  approvalStatuses,
+  expenseCategories,
+  formatMoney,
+  localExpenseStorageKey,
+  normalizeExpenseCategory,
+  normalizeLocalExpense,
+  normalizeSukoonProject,
+  paymentMethods,
+  sukoonProjects,
+  type ApprovalStatus,
+  type Currency,
+  type LocalExpense,
+} from "@/lib/finance/local-finance";
 import { cn } from "@/lib/utils";
-
-type Currency = "PKR" | "USD";
-type ApprovalStatus = "Draft" | "Pending" | "Approved" | "Paid" | "Rejected";
-
-type LocalExpense = {
-  id: string;
-  date: string;
-  amount: number;
-  currency: Currency;
-  category: string;
-  project: string;
-  description: string;
-  paymentMethod: string;
-  paidBy: string;
-  receiptReference: string;
-  approvalStatus: ApprovalStatus;
-  notes: string;
-};
 
 type InitialExpense = {
   id: string;
@@ -36,21 +32,14 @@ type LocalExpenseTrackerProps = {
   initialExpenses: InitialExpense[];
 };
 
-const storageKey = "sukoonos.local.expenses.v1";
-
-const categories = ["Food Relief", "Medical Aid", "Education", "Transport", "Operations", "Emergency", "Utilities"];
-const projects = ["Winter Relief 2026", "Mobile Medical Camp", "Orphan Education Fund", "Food Parcel Program", "General Operations"];
-const paymentMethods = ["Cash", "Bank Transfer", "Card", "Cheque", "Mobile Wallet"];
-const statuses: ApprovalStatus[] = ["Draft", "Pending", "Approved", "Paid", "Rejected"];
-
 const demoExpenses: LocalExpense[] = [
   {
     id: "local-expense-1",
     date: "2026-07-11",
     amount: 415000,
     currency: "PKR",
-    category: "Medical Aid",
-    project: "Mobile Medical Camp",
+    category: "Medical Supplies",
+    project: "Hospital Project",
     description: "Emergency medicine procurement",
     paymentMethod: "Bank Transfer",
     paidBy: "Ayesha Khan",
@@ -63,8 +52,8 @@ const demoExpenses: LocalExpense[] = [
     date: "2026-07-09",
     amount: 9450,
     currency: "USD",
-    category: "Education",
-    project: "Orphan Education Fund",
+    category: "Office Supplies",
+    project: "Orphan Sponsorship",
     description: "School books and stationery",
     paymentMethod: "Card",
     paidBy: "Mariam Khan",
@@ -77,8 +66,8 @@ const demoExpenses: LocalExpense[] = [
     date: "2026-07-06",
     amount: 680000,
     currency: "PKR",
-    category: "Food Relief",
-    project: "Food Parcel Program",
+    category: "Food",
+    project: "Food Parcels",
     description: "Food parcel packaging and staples",
     paymentMethod: "Cheque",
     paidBy: "Bilal Ahmed",
@@ -92,8 +81,8 @@ const emptyForm: Omit<LocalExpense, "id"> = {
   date: new Date().toISOString().slice(0, 10),
   amount: 0,
   currency: "PKR",
-  category: categories[0],
-  project: projects[0],
+  category: expenseCategories[0],
+  project: sukoonProjects[0],
   description: "",
   paymentMethod: paymentMethods[0],
   paidBy: "",
@@ -121,23 +110,15 @@ function normalizeInitialExpense(expense: InitialExpense, index: number): LocalE
     date: new Date(Date.now() - index * 86400000).toISOString().slice(0, 10),
     amount: parseCurrencyAmount(expense.amount),
     currency: expense.amount.includes("$") ? "USD" : "PKR",
-    category: expense.category,
-    project: expense.project,
+    category: normalizeExpenseCategory(expense.category),
+    project: normalizeSukoonProject(expense.project),
     description: expense.vendor,
     paymentMethod: "Bank Transfer",
     paidBy: "Operations Team",
     receiptReference: `EXP-${String(index + 1).padStart(4, "0")}`,
-    approvalStatus: statuses.includes(expense.status as ApprovalStatus) ? (expense.status as ApprovalStatus) : "Pending",
+    approvalStatus: approvalStatuses.includes(expense.status as ApprovalStatus) ? (expense.status as ApprovalStatus) : "Pending",
     notes: "Imported from SukoonOS demo data.",
   };
-}
-
-function formatMoney(amount: number, currency: Currency) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: currency === "PKR" ? 0 : 2,
-  }).format(amount);
 }
 
 function escapeCsv(value: string | number) {
@@ -154,27 +135,32 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
   const [statusFilter, setStatusFilter] = useState<"All" | ApprovalStatus>("All");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [projectFilter, setProjectFilter] = useState("All");
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(storageKey);
+    const saved = window.localStorage.getItem(localExpenseStorageKey);
 
     if (saved) {
       try {
-        setExpenses(JSON.parse(saved) as LocalExpense[]);
+        const normalized = (JSON.parse(saved) as LocalExpense[]).map(normalizeLocalExpense);
+        setExpenses(normalized);
+        window.localStorage.setItem(localExpenseStorageKey, JSON.stringify(normalized));
+        setHydrated(true);
         return;
       } catch {
-        window.localStorage.removeItem(storageKey);
+        window.localStorage.removeItem(localExpenseStorageKey);
       }
     }
 
-    setExpenses(initialExpenses.length ? initialExpenses.map(normalizeInitialExpense) : demoExpenses);
+    setExpenses(initialExpenses.length ? initialExpenses.map(normalizeInitialExpense) : demoExpenses.map(normalizeLocalExpense));
+    setHydrated(true);
   }, [initialExpenses]);
 
   useEffect(() => {
-    if (expenses.length) {
-      window.localStorage.setItem(storageKey, JSON.stringify(expenses));
+    if (hydrated) {
+      window.localStorage.setItem(localExpenseStorageKey, JSON.stringify(expenses));
     }
-  }, [expenses]);
+  }, [expenses, hydrated]);
 
   const filteredExpenses = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -351,7 +337,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
           </Field>
           <Field label="Approval status">
             <select className={inputClass} onChange={(event) => updateForm("approvalStatus", event.target.value as ApprovalStatus)} value={form.approvalStatus}>
-              {statuses.map((status) => (
+              {approvalStatuses.map((status) => (
                 <option key={status} value={status}>
                   {status}
                 </option>
@@ -360,7 +346,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
           </Field>
           <Field label="Category">
             <select className={inputClass} onChange={(event) => updateForm("category", event.target.value)} value={form.category}>
-              {categories.map((category) => (
+              {expenseCategories.map((category) => (
                 <option key={category} value={category}>
                   {category}
                 </option>
@@ -369,7 +355,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
           </Field>
           <Field label="Project">
             <select className={inputClass} onChange={(event) => updateForm("project", event.target.value)} value={form.project}>
-              {projects.map((project) => (
+              {sukoonProjects.map((project) => (
                 <option key={project} value={project}>
                   {project}
                 </option>
@@ -433,7 +419,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
           </select>
           <select className={inputClass} onChange={(event) => setStatusFilter(event.target.value as "All" | ApprovalStatus)} value={statusFilter}>
             <option value="All">All statuses</option>
-            {statuses.map((status) => (
+            {approvalStatuses.map((status) => (
               <option key={status} value={status}>
                 {status}
               </option>
@@ -441,7 +427,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
           </select>
           <select className={inputClass} onChange={(event) => setCategoryFilter(event.target.value)} value={categoryFilter}>
             <option value="All">All categories</option>
-            {categories.map((category) => (
+            {expenseCategories.map((category) => (
               <option key={category} value={category}>
                 {category}
               </option>
@@ -457,7 +443,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
           </button>
           <select className={cn(inputClass, "lg:col-span-2")} onChange={(event) => setProjectFilter(event.target.value)} value={projectFilter}>
             <option value="All">All projects</option>
-            {projects.map((project) => (
+            {sukoonProjects.map((project) => (
               <option key={project} value={project}>
                 {project}
               </option>
