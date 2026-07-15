@@ -18,6 +18,7 @@ export type LocalDonation = LocalMoney & {
   id: string;
   donorId: string;
   donorName: string;
+  projectId: string;
   project: string;
   accountId: string;
   method: string;
@@ -31,6 +32,7 @@ export type LocalTransfer = LocalMoney & {
   id: string;
   fromAccountId: string;
   toAccountId: string;
+  projectId: string;
   project: string;
   date: string;
   status: "Draft" | "Review" | "Scheduled" | "Completed" | "Cancelled";
@@ -57,6 +59,7 @@ export type LocalProject = {
   documentPlaceholders: Array<{ id: string; label: string }>;
   donorUpdates: Array<{ id: string; date: string; title: string; notes: string }>;
   completionReport: string;
+  archivedAt: string;
 };
 
 export type LocalDonor = {

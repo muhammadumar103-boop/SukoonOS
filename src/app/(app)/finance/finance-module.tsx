@@ -25,15 +25,15 @@ import {
   formatMoney,
   normalizeFinanceAccount,
   normalizeFinanceBudget,
-  sukoonProjects,
   type AccountKind,
   type Currency,
   type FinanceAccount,
   type FinanceBudget,
   type LocalExpense,
 } from "@/lib/finance/local-finance";
+import { activeProjectOptions, projectLabel } from "@/lib/local-data/projects";
 import { loadLocalWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
-import type { LocalDonation, LocalTransfer, LocalWorkspace } from "@/lib/local-data/schema";
+import type { LocalDonation, LocalProject, LocalTransfer, LocalWorkspace } from "@/lib/local-data/schema";
 import { cn } from "@/lib/utils";
 
 type AccountFormState = {
@@ -47,7 +47,7 @@ type AccountFormState = {
 
 type BudgetFormState = {
   name: string;
-  project: string;
+  projectId: string;
   category: string;
   period: FinanceBudget["period"];
   currency: Currency;
@@ -66,7 +66,7 @@ const emptyAccountForm: AccountFormState = {
 
 const emptyBudgetForm: BudgetFormState = {
   name: "",
-  project: sukoonProjects[0],
+  projectId: "",
   category: expenseCategories[0],
   period: "Monthly",
   currency: "PKR",
@@ -80,6 +80,7 @@ export function FinanceModule() {
   const [expenses, setExpenses] = useState<LocalExpense[]>([]);
   const [donations, setDonations] = useState<LocalDonation[]>([]);
   const [transfers, setTransfers] = useState<LocalTransfer[]>([]);
+  const [projects, setProjects] = useState<LocalProject[]>([]);
   const [accountSearch, setAccountSearch] = useState("");
   const [budgetSearch, setBudgetSearch] = useState("");
   const [accountForm, setAccountForm] = useState<AccountFormState>(emptyAccountForm);
@@ -95,6 +96,11 @@ export function FinanceModule() {
     setExpenses(localWorkspace.expenses);
     setDonations(localWorkspace.donations);
     setTransfers(localWorkspace.transfers);
+    setProjects(localWorkspace.projects);
+    setBudgetForm((current) => ({
+      ...current,
+      projectId: activeProjectOptions(localWorkspace.projects)[0]?.id ?? current.projectId,
+    }));
     setHydrated(true);
   }, []);
 
@@ -135,7 +141,10 @@ export function FinanceModule() {
   const budgetRows = useMemo(() => {
     return budgets.map((budget) => {
       const spentNative = expenses
-        .filter((expense) => expense.project === budget.project && expense.category === budget.category && expense.approvalStatus !== "Rejected")
+        .filter((expense) => {
+          const sameProject = budget.projectId ? expense.projectId === budget.projectId : expense.project === budget.project;
+          return sameProject && expense.category === budget.category && expense.approvalStatus !== "Rejected";
+        })
         .reduce((sum, expense) => {
           const amounts = convertedExpenseAmounts(expense);
           return sum + (budget.currency === "PKR" ? amounts.pkr : amounts.usd);
@@ -157,12 +166,12 @@ export function FinanceModule() {
     const query = budgetSearch.trim().toLowerCase();
 
     return budgetRows.filter((budget) =>
-      [budget.name, budget.project, budget.category, budget.period, budget.currency, budget.owner, budget.status]
+      [budget.name, projectLabel(projects, budget), budget.category, budget.period, budget.currency, budget.owner, budget.status]
         .join(" ")
         .toLowerCase()
         .includes(query),
     );
-  }, [budgetRows, budgetSearch]);
+  }, [budgetRows, budgetSearch, projects]);
 
   const budgetSummary = useMemo(() => {
     return budgetRows.reduce(
@@ -209,6 +218,8 @@ export function FinanceModule() {
     );
   }, [ledgerEntries]);
 
+  const availableProjects = activeProjectOptions(projects);
+
   function handleAddAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = accountForm.name.trim();
@@ -235,7 +246,8 @@ export function FinanceModule() {
   function handleAddBudget(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = budgetForm.name.trim();
-    if (!name) {
+    const selectedProject = projects.find((project) => project.id === budgetForm.projectId);
+    if (!name || !selectedProject) {
       return;
     }
 
@@ -244,7 +256,8 @@ export function FinanceModule() {
       normalizeFinanceBudget({
         id: `budget-${Date.now()}`,
         name,
-        project: budgetForm.project,
+        projectId: selectedProject.id,
+        project: selectedProject.name,
         category: budgetForm.category,
         period: budgetForm.period,
         currency: budgetForm.currency,
@@ -252,7 +265,10 @@ export function FinanceModule() {
         owner: budgetForm.owner.trim(),
       }),
     ]);
-    setBudgetForm(emptyBudgetForm);
+    setBudgetForm({
+      ...emptyBudgetForm,
+      projectId: activeProjectOptions(projects)[0]?.id ?? "",
+    });
   }
 
   return (
@@ -368,7 +384,7 @@ export function FinanceModule() {
                       <p className="font-semibold text-slate-950">{budget.name}</p>
                       <p className="mt-1 text-xs text-slate-500">{budget.owner || "No owner assigned"}</p>
                     </td>
-                    <td className="px-5 py-4 text-slate-500">{budget.project}</td>
+                    <td className="px-5 py-4 text-slate-500">{projectLabel(projects, budget)}</td>
                     <td className="px-5 py-4 text-slate-500">{budget.category}</td>
                     <td className="px-5 py-4 text-slate-500">{budget.period}</td>
                     <td className="px-5 py-4 text-right font-semibold text-slate-950">{formatMoney(budget.amount, budget.currency)}</td>
@@ -414,13 +430,18 @@ export function FinanceModule() {
           <p className="mt-1 text-sm text-slate-500">Budgets stay separate from projects and expense categories.</p>
           <div className="mt-5 grid gap-3">
             <input className={inputClass} placeholder="Budget name" value={budgetForm.name} onChange={(event) => setBudgetForm({ ...budgetForm, name: event.target.value })} />
-            <select className={inputClass} value={budgetForm.project} onChange={(event) => setBudgetForm({ ...budgetForm, project: event.target.value })}>
-              {sukoonProjects.map((project) => (
-                <option key={project} value={project}>
-                  {project}
-                </option>
-              ))}
+            <select className={inputClass} disabled={!availableProjects.length} value={budgetForm.projectId} onChange={(event) => setBudgetForm({ ...budgetForm, projectId: event.target.value })}>
+              {availableProjects.length ? (
+                availableProjects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))
+              ) : (
+                <option value="">Create a project first</option>
+              )}
             </select>
+            {!availableProjects.length ? <p className="text-xs text-slate-500">Create a project before adding budgets in demo mode.</p> : null}
             <select className={inputClass} value={budgetForm.category} onChange={(event) => setBudgetForm({ ...budgetForm, category: event.target.value })}>
               {expenseCategories.map((category) => (
                 <option key={category} value={category}>
@@ -441,9 +462,9 @@ export function FinanceModule() {
             </div>
             <input className={inputClass} placeholder="Budget amount" type="number" value={budgetForm.amount} onChange={(event) => setBudgetForm({ ...budgetForm, amount: event.target.value })} />
             <input className={inputClass} placeholder="Owner" value={budgetForm.owner} onChange={(event) => setBudgetForm({ ...budgetForm, owner: event.target.value })} />
-            <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800" type="submit">
+            <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300" disabled={!availableProjects.length} type="submit">
               <Plus className="size-4" aria-hidden="true" />
-              Add budget
+              {availableProjects.length ? "Add budget" : "Create project first"}
             </button>
           </div>
         </form>

@@ -1,4 +1,5 @@
 import { defaultUsdToPkrRate } from "@/lib/finance/local-finance";
+import { sampleLocalProjects } from "@/lib/local-data/projects";
 import type { LocalDonation, LocalDonor, LocalTransfer } from "@/lib/local-data/schema";
 
 function moneyValues(originalAmount: number, originalCurrency: "PKR" | "USD", exchangeRate: number) {
@@ -26,6 +27,7 @@ export const sampleLocalDonations: LocalDonation[] = [
     id: "donation-1",
     donorId: "donor-1",
     donorName: "Al Noor Group",
+    projectId: "project-food-parcels",
     project: "Food Parcels",
     accountId: "main-donations-bank",
     method: "Bank Transfer",
@@ -39,6 +41,7 @@ export const sampleLocalDonations: LocalDonation[] = [
     id: "donation-2",
     donorId: "donor-2",
     donorName: "Sarah Malik",
+    projectId: "project-hospital",
     project: "Hospital Project",
     accountId: "main-donations-bank",
     method: "Card",
@@ -52,6 +55,7 @@ export const sampleLocalDonations: LocalDonation[] = [
     id: "donation-3",
     donorId: "donor-3",
     donorName: "Rahman Family Trust",
+    projectId: "project-orphan-sponsorship",
     project: "Orphan Sponsorship",
     accountId: "main-donations-bank",
     method: "Cheque",
@@ -65,6 +69,7 @@ export const sampleLocalDonations: LocalDonation[] = [
     id: "donation-4",
     donorId: "donor-4",
     donorName: "Green Crescent LLC",
+    projectId: "project-daily-iftar",
     project: "Daily Iftar",
     accountId: "main-donations-bank",
     method: "Bank Transfer",
@@ -81,6 +86,7 @@ export const sampleLocalTransfers: LocalTransfer[] = [
     id: "transfer-1",
     fromAccountId: "main-donations-bank",
     toAccountId: "field-cash-pkr",
+    projectId: "project-general-operations",
     project: "Field Operations",
     date: "2026-07-12",
     status: "Scheduled",
@@ -92,6 +98,7 @@ export const sampleLocalTransfers: LocalTransfer[] = [
     id: "transfer-2",
     fromAccountId: "main-donations-bank",
     toAccountId: "operations-bank-pkr",
+    projectId: "project-hospital",
     project: "Hospital Project",
     date: "2026-07-10",
     status: "Completed",
@@ -103,6 +110,7 @@ export const sampleLocalTransfers: LocalTransfer[] = [
     id: "transfer-3",
     fromAccountId: "main-donations-bank",
     toAccountId: "operations-bank-pkr",
+    projectId: "project-orphan-sponsorship",
     project: "Orphan Sponsorship",
     date: "2026-07-08",
     status: "Completed",
@@ -186,3 +194,5 @@ export const sampleLocalDonors: LocalDonor[] = [
     reminderStatus: "Upcoming",
   },
 ];
+
+export { sampleLocalProjects };

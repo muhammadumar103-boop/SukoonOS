@@ -85,7 +85,11 @@ Verification:
 
 ### Milestone 3: Projects And Budgets
 
-Status: Not started
+Status: In progress
+
+Checkpoint:
+
+- Donor stabilization sprint completed on 2026-07-15 with local workspace export/import, backups, audit logging, dashboard quick action wiring, dead-interaction cleanup, and demo-mode donor CRUD.
 
 Scope:
 

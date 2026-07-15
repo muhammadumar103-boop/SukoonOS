@@ -1,10 +1,26 @@
 import { DeferredAction } from "@/components/data-display/deferred-action";
+import { LocalWorkspaceBanner } from "@/components/data-display/local-workspace-banner";
 import { PageHeader } from "@/components/data-display/page-header";
 import { ProgressBar } from "@/components/data-display/progress-bar";
 import { StatusBadge } from "@/components/data-display/status-badge";
+import { isDemoMode } from "@/config/runtime";
+import { LocalProjectsManager } from "@/app/(app)/projects/local-projects-manager";
 import { getProjects } from "@/server/queries/dashboard";
 
 export default async function ProjectsPage() {
+  if (isDemoMode) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Projects"
+          description="Create and manage local Sukoon projects with linked budgets, donations, expenses, transfers, and ledger activity."
+        />
+        <LocalWorkspaceBanner />
+        <LocalProjectsManager />
+      </div>
+    );
+  }
+
   const projects = await getProjects();
 
   return (

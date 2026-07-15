@@ -16,6 +16,7 @@ export type FinanceLedgerEntry = {
   date: string;
   type: LedgerType;
   description: string;
+  projectId: string;
   project: string;
   party: string;
   method: string;
@@ -49,6 +50,7 @@ export function donationToLedger(donation: LocalDonation): FinanceLedgerEntry {
     date: donation.date,
     type: donation.status === "Refunded" ? "Refund" : "Donation",
     description: `Donation from ${donation.donorName}`,
+    projectId: donation.projectId,
     project: donation.project,
     party: donation.donorName,
     method: donation.method,
@@ -79,6 +81,7 @@ export function expenseToLedger(expense: LocalExpense): FinanceLedgerEntry {
     date: expense.date,
     type: "Expense",
     description: expense.description,
+    projectId: expense.projectId,
     project: expense.project,
     party: expense.paidBy || "Not set",
     method: expense.paymentMethod,
@@ -107,6 +110,7 @@ export function transferToLedger(transfer: LocalTransfer, accounts: FinanceAccou
     date: transfer.date,
     type: "Transfer",
     description: `${from?.name ?? "Unknown account"} to ${to?.name ?? "Unknown account"}`,
+    projectId: transfer.projectId,
     project: transfer.project,
     party: from?.name ?? "Internal transfer",
     method: "Internal Transfer",
@@ -134,6 +138,7 @@ export function staticLedgerEntries(): FinanceLedgerEntry[] {
       date: "2026-07-08",
       type: "Refund",
       description: "Vendor refund for duplicate medical supply invoice",
+      projectId: "project-hospital",
       project: "Hospital Project",
       party: "City Medical Supplies",
       method: "Bank Transfer",
@@ -156,6 +161,7 @@ export function staticLedgerEntries(): FinanceLedgerEntry[] {
       date: "2026-07-07",
       type: "Fee",
       description: "Bank transfer fee for program account movement",
+      projectId: "project-general-operations",
       project: "General Operations",
       party: "Bank",
       method: "Bank Transfer",
@@ -178,6 +184,7 @@ export function staticLedgerEntries(): FinanceLedgerEntry[] {
       date: "2026-07-05",
       type: "Adjustment",
       description: "Opening balance adjustment for local demo ledger",
+      projectId: "project-general-operations",
       project: "General Operations",
       party: "Finance",
       method: "Adjustment",

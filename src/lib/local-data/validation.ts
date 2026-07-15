@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { localWorkspaceSchemaVersion, type LocalDonor, type LocalDonation, type LocalTransfer, type LocalWorkspace } from "@/lib/local-data/schema";
+import {
+  localWorkspaceSchemaVersion,
+  type LocalDonor,
+  type LocalDonation,
+  type LocalProject,
+  type LocalTransfer,
+  type LocalWorkspace,
+} from "@/lib/local-data/schema";
 
 const currencySchema = z.enum(["PKR", "USD"]);
 const statusSchema = z.enum(["Active", "Review", "Paused"]);
@@ -15,6 +22,7 @@ export const localDonationSchema = moneySchema.extend({
   id: z.string().min(1),
   donorId: z.string().min(1),
   donorName: z.string().min(1),
+  projectId: z.string(),
   project: z.string().min(1),
   accountId: z.string().min(1),
   method: z.string().min(1),
@@ -28,6 +36,7 @@ export const localTransferSchema = moneySchema.extend({
   id: z.string().min(1),
   fromAccountId: z.string().min(1),
   toAccountId: z.string().min(1),
+  projectId: z.string(),
   project: z.string().min(1),
   date: z.string().min(1),
   status: z.enum(["Draft", "Review", "Scheduled", "Completed", "Cancelled"]),
@@ -60,6 +69,53 @@ export const localDonorSchema = z.object({
   reminderStatus: z.enum(["None", "Upcoming", "Overdue", "Completed"]),
 }) as z.ZodType<LocalDonor>;
 
+export const localProjectSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  projectType: z.string().min(1),
+  location: z.string(),
+  status: z.enum(["Planning", "Active", "Review", "Closing", "Completed", "Paused"]),
+  startDate: z.string(),
+  targetCompletionDate: z.string(),
+  budgetPkr: z.number(),
+  budgetUsd: z.number(),
+  beneficiaries: z.number(),
+  responsibleStaff: z.string(),
+  progress: z.number(),
+  notes: z.string(),
+  timeline: z.array(
+    z.object({
+      id: z.string().min(1),
+      date: z.string(),
+      title: z.string().min(1),
+      notes: z.string(),
+    }),
+  ),
+  mediaPlaceholders: z.array(
+    z.object({
+      id: z.string().min(1),
+      type: z.enum(["Photo", "Video"]),
+      label: z.string().min(1),
+    }),
+  ),
+  documentPlaceholders: z.array(
+    z.object({
+      id: z.string().min(1),
+      label: z.string().min(1),
+    }),
+  ),
+  donorUpdates: z.array(
+    z.object({
+      id: z.string().min(1),
+      date: z.string(),
+      title: z.string().min(1),
+      notes: z.string(),
+    }),
+  ),
+  completionReport: z.string(),
+  archivedAt: z.string(),
+}) as z.ZodType<LocalProject>;
+
 export const localWorkspaceSchema = z.object({
   schemaVersion: z.literal(localWorkspaceSchemaVersion),
   sampleDataEnabled: z.boolean(),
@@ -81,6 +137,7 @@ export const localWorkspaceSchema = z.object({
     z.object({
       id: z.string().min(1),
       name: z.string().min(1),
+      projectId: z.string(),
       project: z.string().min(1),
       category: z.string().min(1),
       period: z.enum(["Monthly", "Quarterly", "Annual"]),
@@ -97,6 +154,7 @@ export const localWorkspaceSchema = z.object({
       originalCurrency: currencySchema,
       exchangeRate: z.number().positive(),
       category: z.string().min(1),
+      projectId: z.string(),
       project: z.string().min(1),
       fundingAccountId: z.string().min(1),
       description: z.string(),
@@ -109,7 +167,7 @@ export const localWorkspaceSchema = z.object({
   ),
   donations: z.array(localDonationSchema),
   transfers: z.array(localTransferSchema),
-  projects: z.array(z.any()),
+  projects: z.array(localProjectSchema),
   donors: z.array(localDonorSchema),
   tasks: z.array(z.any()),
   approvals: z.array(z.any()),

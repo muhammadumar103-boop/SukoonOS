@@ -20,6 +20,7 @@ export type BudgetPeriod = "Monthly" | "Quarterly" | "Annual";
 export type FinanceBudget = {
   id: string;
   name: string;
+  projectId: string;
   project: string;
   category: string;
   period: BudgetPeriod;
@@ -35,6 +36,7 @@ export type LocalExpense = {
   originalCurrency: Currency;
   exchangeRate: number;
   category: string;
+  projectId: string;
   project: string;
   fundingAccountId: string;
   description: string;
@@ -129,6 +131,7 @@ export const defaultFinanceBudgets: FinanceBudget[] = [
   {
     id: "budget-hospital-medical",
     name: "Hospital medical supply reserve",
+    projectId: "project-hospital",
     project: "Hospital Project",
     category: "Medical Supplies",
     period: "Monthly",
@@ -139,6 +142,7 @@ export const defaultFinanceBudgets: FinanceBudget[] = [
   {
     id: "budget-food-parcels",
     name: "Food parcel distribution",
+    projectId: "project-food-parcels",
     project: "Food Parcels",
     category: "Food",
     period: "Monthly",
@@ -149,6 +153,7 @@ export const defaultFinanceBudgets: FinanceBudget[] = [
   {
     id: "budget-orphan-support",
     name: "Orphan sponsorship operations",
+    projectId: "project-orphan-sponsorship",
     project: "Orphan Sponsorship",
     category: "Salaries and Wages",
     period: "Quarterly",
@@ -159,6 +164,7 @@ export const defaultFinanceBudgets: FinanceBudget[] = [
   {
     id: "budget-general-operations",
     name: "General operations overhead",
+    projectId: "project-general-operations",
     project: "General Operations",
     category: "Utilities",
     period: "Monthly",
@@ -223,6 +229,7 @@ export function normalizeLocalExpense(expense: LegacyLocalExpense): LocalExpense
     originalCurrency: currentExpense.originalCurrency ?? _legacyCurrency ?? "PKR",
     exchangeRate: Number(currentExpense.exchangeRate ?? defaultUsdToPkrRate),
     category: normalizeExpenseCategory(currentExpense.category ?? "Other"),
+    projectId: currentExpense.projectId ?? "",
     project: normalizeSukoonProject(currentExpense.project ?? "General Operations"),
     fundingAccountId: currentExpense.fundingAccountId ?? defaultFundingAccountId(currentExpense.paymentMethod ?? paymentMethods[0], currentExpense.originalCurrency ?? _legacyCurrency ?? "PKR"),
     description: currentExpense.description ?? "",
@@ -264,6 +271,7 @@ export function normalizeFinanceBudget(budget: Partial<FinanceBudget>): FinanceB
   return {
     id: budget.id ?? `budget-${Date.now()}`,
     name: budget.name ?? "New budget",
+    projectId: budget.projectId ?? "",
     project: normalizeSukoonProject(budget.project ?? "General Operations"),
     category: normalizeExpenseCategory(budget.category ?? "Other"),
     period: budget.period ?? "Monthly",

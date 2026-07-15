@@ -3,10 +3,11 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Download, Pencil, Search, Trash2 } from "lucide-react";
 import { StatusBadge } from "@/components/data-display/status-badge";
-import { defaultUsdToPkrRate, formatMoney, sukoonProjects, type Currency, type FinanceAccount } from "@/lib/finance/local-finance";
+import { defaultUsdToPkrRate, formatMoney, type Currency, type FinanceAccount } from "@/lib/finance/local-finance";
+import { activeProjectOptions, projectLabel } from "@/lib/local-data/projects";
 import { moneyValues } from "@/lib/local-data/migrations";
 import { loadLocalWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
-import type { LocalTransfer, LocalWorkspace } from "@/lib/local-data/schema";
+import type { LocalProject, LocalTransfer, LocalWorkspace } from "@/lib/local-data/schema";
 import { cn } from "@/lib/utils";
 
 type TransferStatus = LocalTransfer["status"];
@@ -16,7 +17,7 @@ const transferStatuses: TransferStatus[] = ["Draft", "Review", "Scheduled", "Com
 type TransferForm = {
   fromAccountId: string;
   toAccountId: string;
-  project: string;
+  projectId: string;
   date: string;
   status: TransferStatus;
   originalAmount: number;
@@ -29,7 +30,7 @@ type TransferForm = {
 const emptyForm: TransferForm = {
   fromAccountId: "main-donations-bank",
   toAccountId: "operations-bank-pkr",
-  project: sukoonProjects[0],
+  projectId: "",
   date: new Date().toISOString().slice(0, 10),
   status: "Review",
   originalAmount: 0,
@@ -56,7 +57,7 @@ function transferToForm(transfer: LocalTransfer): TransferForm {
   return {
     fromAccountId: transfer.fromAccountId,
     toAccountId: transfer.toAccountId,
-    project: transfer.project,
+    projectId: transfer.projectId,
     date: transfer.date,
     status: transfer.status,
     originalAmount: transfer.originalAmount,
@@ -71,6 +72,7 @@ export function LocalTransfersManager() {
   const workspaceRef = useRef<LocalWorkspace | null>(null);
   const [transfers, setTransfers] = useState<LocalTransfer[]>([]);
   const [accounts, setAccounts] = useState<FinanceAccount[]>([]);
+  const [projects, setProjects] = useState<LocalProject[]>([]);
   const [form, setForm] = useState<TransferForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -83,10 +85,13 @@ export function LocalTransfersManager() {
     workspaceRef.current = workspace;
     setTransfers(workspace.transfers);
     setAccounts(workspace.financeAccounts);
+    setProjects(workspace.projects);
+    const defaultProject = activeProjectOptions(workspace.projects)[0];
     setForm((current) => ({
       ...current,
       fromAccountId: workspace.financeAccounts[0]?.id ?? current.fromAccountId,
       toAccountId: workspace.financeAccounts[1]?.id ?? current.toAccountId,
+      projectId: defaultProject?.id ?? current.projectId,
     }));
     setHydrated(true);
   }, []);
@@ -105,15 +110,16 @@ export function LocalTransfersManager() {
     return transfers.filter((transfer) => {
       const fromAccount = accounts.find((account) => account.id === transfer.fromAccountId)?.name ?? "";
       const toAccount = accounts.find((account) => account.id === transfer.toAccountId)?.name ?? "";
-      const searchable = [transfer.date, fromAccount, toAccount, transfer.project, transfer.status, transfer.reference, transfer.notes, transfer.originalCurrency].join(" ").toLowerCase();
+      const displayProject = projectLabel(projects, transfer);
+      const searchable = [transfer.date, fromAccount, toAccount, displayProject, transfer.status, transfer.reference, transfer.notes, transfer.originalCurrency].join(" ").toLowerCase();
 
       return (
         (!query || searchable.includes(query)) &&
         (statusFilter === "All" || transfer.status === statusFilter) &&
-        (projectFilter === "All" || transfer.project === projectFilter)
+        (projectFilter === "All" || displayProject === projectFilter)
       );
     });
-  }, [accounts, projectFilter, search, statusFilter, transfers]);
+  }, [accounts, projectFilter, projects, search, statusFilter, transfers]);
 
   const totals = useMemo(() => {
     return filteredTransfers.reduce(
@@ -133,18 +139,21 @@ export function LocalTransfersManager() {
   }
 
   function resetForm() {
+    const firstProject = activeProjectOptions(projects)[0];
     setForm({
       ...emptyForm,
       fromAccountId: accounts[0]?.id ?? emptyForm.fromAccountId,
       toAccountId: accounts[1]?.id ?? emptyForm.toAccountId,
+      projectId: firstProject?.id ?? "",
     });
     setEditingId(null);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const selectedProject = projects.find((project) => project.id === form.projectId);
 
-    if (!form.fromAccountId || !form.toAccountId || form.fromAccountId === form.toAccountId) {
+    if (!form.fromAccountId || !form.toAccountId || form.fromAccountId === form.toAccountId || !selectedProject) {
       return;
     }
 
@@ -152,7 +161,8 @@ export function LocalTransfersManager() {
       id: editingId ?? createId(),
       fromAccountId: form.fromAccountId,
       toAccountId: form.toAccountId,
-      project: form.project,
+      projectId: selectedProject.id,
+      project: selectedProject.name,
       date: form.date,
       status: form.status,
       reference: form.reference.trim(),
@@ -175,7 +185,7 @@ export function LocalTransfersManager() {
       transfer.exchangeRate,
       transfer.pkrAmount,
       transfer.usdAmount,
-      transfer.project,
+      projectLabel(projects, transfer),
       transfer.reference,
       transfer.status,
       transfer.notes,
@@ -190,6 +200,9 @@ export function LocalTransfersManager() {
     link.click();
     URL.revokeObjectURL(url);
   }
+
+  const availableProjects = activeProjectOptions(projects);
+  const projectNames = Array.from(new Set(transfers.map((transfer) => projectLabel(projects, transfer)))).sort();
 
   return (
     <div className="space-y-6">
@@ -247,14 +260,23 @@ export function LocalTransfersManager() {
             <input className={inputClass} min="0.0001" onChange={(event) => updateForm("exchangeRate", Number(event.target.value))} required step="0.0001" type="number" value={form.exchangeRate} />
           </Field>
           <Field label="Project or purpose">
-            <select className={inputClass} onChange={(event) => updateForm("project", event.target.value)} value={form.project}>
-              {sukoonProjects.map((project) => (
-                <option key={project} value={project}>
-                  {project}
-                </option>
-              ))}
-              <option value="Field Operations">Field Operations</option>
+            <select
+              className={inputClass}
+              disabled={!availableProjects.length}
+              onChange={(event) => updateForm("projectId", event.target.value)}
+              value={form.projectId}
+            >
+              {availableProjects.length ? (
+                availableProjects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))
+              ) : (
+                <option value="">Create a project first</option>
+              )}
             </select>
+            {!availableProjects.length ? <span className="mt-1 block text-xs text-slate-500">Projects are managed from the Projects page.</span> : null}
           </Field>
           <Field label="Reference">
             <input className={inputClass} onChange={(event) => updateForm("reference", event.target.value)} placeholder="Transfer reference" value={form.reference} />
@@ -263,8 +285,8 @@ export function LocalTransfersManager() {
             <input className={inputClass} onChange={(event) => updateForm("notes", event.target.value)} placeholder="Reason, approval, or reconciliation details" value={form.notes} />
           </Field>
           <div className="flex flex-col gap-3 sm:flex-row lg:col-span-4">
-            <button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800">
-              {editingId ? "Save changes" : "Create transfer"}
+            <button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none" disabled={!availableProjects.length}>
+              {!availableProjects.length ? "Create project first" : editingId ? "Save changes" : "Create transfer"}
             </button>
             {editingId ? (
               <button className="h-10 rounded-md border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" onClick={resetForm} type="button">
@@ -291,7 +313,7 @@ export function LocalTransfersManager() {
           </select>
           <select className={inputClass} onChange={(event) => setProjectFilter(event.target.value)} value={projectFilter}>
             <option value="All">All projects</option>
-            {Array.from(new Set(transfers.map((transfer) => transfer.project))).map((project) => (
+            {projectNames.map((project) => (
               <option key={project} value={project}>
                 {project}
               </option>
@@ -333,7 +355,7 @@ export function LocalTransfersManager() {
                   </div>
                 </div>
                 <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 text-sm sm:grid-cols-4">
-                  <p className="text-slate-500">Project: <span className="font-medium text-slate-950">{transfer.project}</span></p>
+                  <p className="text-slate-500">Project: <span className="font-medium text-slate-950">{projectLabel(projects, transfer)}</span></p>
                   <p className="text-slate-500">PKR: <span className="font-medium text-slate-950">{formatMoney(transfer.pkrAmount, "PKR")}</span></p>
                   <p className="text-slate-500">USD: <span className="font-medium text-slate-950">{formatMoney(transfer.usdAmount, "USD")}</span></p>
                   <p className="text-slate-500">Ref: <span className="font-medium text-slate-950">{transfer.reference || "None"}</span></p>

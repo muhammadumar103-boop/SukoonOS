@@ -17,13 +17,14 @@ import {
   normalizeSukoonProject,
   originalExpenseLabel,
   paymentMethods,
-  sukoonProjects,
   type ApprovalStatus,
   type Currency,
   type FinanceAccount,
   type LocalExpense,
 } from "@/lib/finance/local-finance";
+import { activeProjectOptions, projectLabel } from "@/lib/local-data/projects";
 import { loadLocalWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
+import type { LocalProject } from "@/lib/local-data/schema";
 import { cn } from "@/lib/utils";
 
 type InitialExpense = {
@@ -47,6 +48,7 @@ const demoExpenses: LocalExpense[] = [
     originalCurrency: "PKR",
     exchangeRate: 278,
     category: "Medical Supplies",
+    projectId: "project-hospital",
     project: "Hospital Project",
     fundingAccountId: "operations-bank-pkr",
     description: "Emergency medicine procurement",
@@ -63,6 +65,7 @@ const demoExpenses: LocalExpense[] = [
     originalCurrency: "USD",
     exchangeRate: 279.5,
     category: "Office Supplies",
+    projectId: "project-orphan-sponsorship",
     project: "Orphan Sponsorship",
     fundingAccountId: "main-donations-bank",
     description: "School books and stationery",
@@ -79,6 +82,7 @@ const demoExpenses: LocalExpense[] = [
     originalCurrency: "PKR",
     exchangeRate: 277,
     category: "Food",
+    projectId: "project-food-parcels",
     project: "Food Parcels",
     fundingAccountId: "operations-bank-pkr",
     description: "Food parcel packaging and staples",
@@ -96,7 +100,8 @@ const emptyForm: Omit<LocalExpense, "id"> = {
   originalCurrency: "PKR",
   exchangeRate: defaultUsdToPkrRate,
   category: expenseCategories[0],
-  project: sukoonProjects[0],
+  projectId: "",
+  project: "General Operations",
   fundingAccountId: defaultFundingAccountId(paymentMethods[0], "PKR"),
   description: "",
   paymentMethod: paymentMethods[0],
@@ -127,6 +132,7 @@ function normalizeInitialExpense(expense: InitialExpense, index: number): LocalE
     originalCurrency: expense.amount.includes("$") ? "USD" : "PKR",
     exchangeRate: defaultUsdToPkrRate,
     category: normalizeExpenseCategory(expense.category),
+    projectId: "",
     project: normalizeSukoonProject(expense.project),
     fundingAccountId: defaultFundingAccountId("Bank Transfer", expense.amount.includes("$") ? "USD" : "PKR"),
     description: expense.vendor,
@@ -155,11 +161,19 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
   const [hydrated, setHydrated] = useState(false);
   const workspaceRef = useRef<ReturnType<typeof loadLocalWorkspace> | null>(null);
   const [accounts, setAccounts] = useState<FinanceAccount[]>([]);
+  const [projects, setProjects] = useState<LocalProject[]>([]);
 
   useEffect(() => {
     const localWorkspace = loadLocalWorkspace();
     workspaceRef.current = localWorkspace;
     setAccounts(localWorkspace.financeAccounts);
+    setProjects(localWorkspace.projects);
+    const defaultProject = activeProjectOptions(localWorkspace.projects)[0];
+    setForm((current) => ({
+      ...current,
+      projectId: defaultProject?.id ?? current.projectId,
+      project: defaultProject?.name ?? current.project,
+    }));
 
     if (localWorkspace.expenses.length) {
       setExpenses(localWorkspace.expenses.map(normalizeLocalExpense));
@@ -200,12 +214,13 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
     const query = search.trim().toLowerCase();
 
     return expenses.filter((expense) => {
+      const displayProject = projectLabel(projects, expense);
       const searchable = [
         expense.date,
         expense.originalCurrency,
         expense.exchangeRate,
         expense.category,
-        expense.project,
+        displayProject,
         expense.description,
         expense.paymentMethod,
         expense.paidBy,
@@ -221,10 +236,10 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
         (currencyFilter === "All" || expense.originalCurrency === currencyFilter) &&
         (statusFilter === "All" || expense.approvalStatus === statusFilter) &&
         (categoryFilter === "All" || expense.category === categoryFilter) &&
-        (projectFilter === "All" || expense.project === projectFilter)
+        (projectFilter === "All" || displayProject === projectFilter)
       );
     });
-  }, [categoryFilter, currencyFilter, expenses, projectFilter, search, statusFilter]);
+  }, [categoryFilter, currencyFilter, expenses, projectFilter, projects, search, statusFilter]);
 
   const totals = useMemo(() => {
     const now = new Date();
@@ -268,16 +283,26 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
   }
 
   function resetForm() {
-    setForm(emptyForm);
+    const firstProject = activeProjectOptions(projects)[0];
+    setForm({
+      ...emptyForm,
+      projectId: firstProject?.id ?? "",
+      project: firstProject?.name ?? "General Operations",
+    });
     setEditingId(null);
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const selectedProject = projects.find((project) => project.id === form.projectId);
+    if (!selectedProject) {
+      return;
+    }
 
     const nextExpense: LocalExpense = {
       id: editingId ?? createId(),
       ...form,
+      project: selectedProject.name,
       originalAmount: Number(form.originalAmount),
       exchangeRate: Number(form.exchangeRate),
     };
@@ -300,6 +325,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
       originalCurrency: expense.originalCurrency,
       exchangeRate: expense.exchangeRate,
       category: expense.category,
+      projectId: expense.projectId,
       project: expense.project,
       fundingAccountId: expense.fundingAccountId,
       description: expense.description,
@@ -340,6 +366,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
     ];
     const rows = filteredExpenses.map((expense) => {
       const amounts = convertedExpenseAmounts(expense);
+      const displayProject = projectLabel(projects, expense);
       return [
         expense.date,
         expense.originalAmount,
@@ -350,7 +377,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
         amounts.pkr,
         amounts.usd,
         expense.category,
-        expense.project,
+        displayProject,
         expense.description,
         expense.paymentMethod,
         expense.paidBy,
@@ -369,6 +396,9 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
     link.click();
     URL.revokeObjectURL(url);
   }
+
+  const availableProjects = activeProjectOptions(projects);
+  const projectNames = Array.from(new Set(expenses.map((expense) => projectLabel(projects, expense)))).sort();
 
   return (
     <div className="space-y-6">
@@ -437,13 +467,27 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
             </select>
           </Field>
           <Field label="Project">
-            <select className={inputClass} onChange={(event) => updateForm("project", event.target.value)} value={form.project}>
-              {sukoonProjects.map((project) => (
-                <option key={project} value={project}>
-                  {project}
-                </option>
-              ))}
+            <select
+              className={inputClass}
+              disabled={!availableProjects.length}
+              onChange={(event) => {
+                const nextProject = projects.find((project) => project.id === event.target.value);
+                updateForm("projectId", event.target.value);
+                updateForm("project", nextProject?.name ?? form.project);
+              }}
+              value={form.projectId}
+            >
+              {availableProjects.length ? (
+                availableProjects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))
+              ) : (
+                <option value="">Create a project first</option>
+              )}
             </select>
+            {!availableProjects.length ? <span className="mt-1 block text-xs text-slate-500">Projects are managed from the Projects page.</span> : null}
           </Field>
           <Field label="Payment method">
             <select className={inputClass} onChange={(event) => updatePaymentMethod(event.target.value)} value={form.paymentMethod}>
@@ -483,8 +527,8 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
             />
           </Field>
           <div className="flex flex-col gap-3 sm:flex-row lg:col-span-4">
-            <button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800">
-              {editingId ? "Save changes" : "Add expense"}
+            <button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none" disabled={!availableProjects.length}>
+              {!availableProjects.length ? "Create project first" : editingId ? "Save changes" : "Add expense"}
             </button>
             {editingId ? (
               <button className="h-10 rounded-md border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" onClick={resetForm} type="button">
@@ -537,7 +581,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
           </button>
           <select className={cn(inputClass, "lg:col-span-2")} onChange={(event) => setProjectFilter(event.target.value)} value={projectFilter}>
             <option value="All">All projects</option>
-            {sukoonProjects.map((project) => (
+            {projectNames.map((project) => (
               <option key={project} value={project}>
                 {project}
               </option>
@@ -577,7 +621,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
                     <p className="mt-1 line-clamp-2 max-w-xs text-xs leading-5 text-slate-500">{expense.notes || expense.paymentMethod}</p>
                   </td>
                   <td className="px-5 py-4 text-slate-500">{expense.category}</td>
-                  <td className="px-5 py-4 text-slate-500">{expense.project}</td>
+                  <td className="px-5 py-4 text-slate-500">{projectLabel(projects, expense)}</td>
                   <td className="px-5 py-4">
                     <p className="font-semibold text-slate-950">{originalExpenseLabel(expense)}</p>
                     <p className="mt-1 text-xs text-slate-500">Original {expense.originalCurrency}</p>
