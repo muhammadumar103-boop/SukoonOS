@@ -22,28 +22,26 @@ const localExpenseAttachmentSchema = strictObject({
   kind: z.enum(["Image", "PDF"]),
   storedAt: z.string().min(1),
 });
-const localExpenseSchema = z
-  .object({
-    id: z.string().min(1),
-    date: z.string().min(1),
-    originalAmount: z.number().positive(),
-    originalCurrency: currencySchema,
-    exchangeRate: z.number().positive().finite(),
-    category: z.string().min(1),
-    projectId: z.string(),
-    project: z.string().min(1),
-    fundingAccountId: z.string().min(1),
-    description: z.string(),
-    paymentMethod: z.string(),
-    paidBy: z.string(),
-    receiptReference: z.string(),
-    transferReference: z.string().optional(),
-    approvalStatus: z.enum(["Draft", "Pending", "Approved", "Paid", "Rejected", "Voided"]),
-    proofNotes: z.string().optional(),
-    notes: z.string(),
-    attachments: z.array(localExpenseAttachmentSchema).optional(),
-  })
-  .passthrough();
+const localExpenseSchema = strictObject({
+  id: z.string().min(1),
+  date: z.string().min(1),
+  originalAmount: z.number().positive(),
+  originalCurrency: currencySchema,
+  exchangeRate: z.number().positive().finite(),
+  category: z.string().min(1),
+  projectId: z.string(),
+  project: z.string().min(1),
+  fundingAccountId: z.string().min(1),
+  description: z.string(),
+  paymentMethod: z.string(),
+  paidBy: z.string(),
+  receiptReference: z.string(),
+  transferReference: z.string(),
+  approvalStatus: z.enum(["Draft", "Pending", "Approved", "Paid", "Rejected", "Voided"]),
+  proofNotes: z.string(),
+  notes: z.string(),
+  attachments: z.array(localExpenseAttachmentSchema),
+});
 const moneySchema = strictObject({
   originalAmount: z.number().positive(),
   originalCurrency: currencySchema,
