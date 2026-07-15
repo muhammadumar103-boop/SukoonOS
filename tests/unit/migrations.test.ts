@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyWorkspace, migrateLocalWorkspace } from "@/lib/local-data/migrations";
 import { localWorkspaceSchemaVersion } from "@/lib/local-data/schema";
+import { localWorkspaceSchema } from "@/lib/local-data/validation";
 import { sampleLocalFinancialRecords } from "@/lib/local-data/seeds";
 
 describe("workspace migrations", () => {
@@ -81,5 +82,37 @@ describe("workspace migrations", () => {
     expect(migrated.financeAccounts).toHaveLength(0);
     expect(migrated.financeBudgets).toHaveLength(0);
     expect(migrated.projects).toHaveLength(0);
+  });
+
+  it("accepts extended expense records with proof metadata", () => {
+    const workspace = createEmptyWorkspace();
+
+    expect(() =>
+      localWorkspaceSchema.parse({
+        ...workspace,
+        expenses: [
+          {
+            id: "expense-1",
+            date: "2026-07-15",
+            originalAmount: 1500,
+            originalCurrency: "PKR",
+            exchangeRate: 278,
+            category: "Food",
+            projectId: "",
+            project: "General Operations",
+            fundingAccountId: "operations-bank-pkr",
+            description: "Groceries",
+            paymentMethod: "Cash",
+            paidBy: "Ayesha",
+            receiptReference: "EXP-1001",
+            transferReference: "TRX-22",
+            approvalStatus: "Approved",
+            proofNotes: "Receipt attached.",
+            notes: "",
+            attachments: [],
+          },
+        ],
+      }),
+    ).not.toThrow();
   });
 });
