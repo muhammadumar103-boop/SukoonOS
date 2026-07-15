@@ -115,4 +115,43 @@ describe("workspace migrations", () => {
       }),
     ).not.toThrow();
   });
+
+  it("normalizes report definitions and drops malformed legacy report entries", () => {
+    const migrated = migrateLocalWorkspace({
+      sampleDataEnabled: false,
+      reports: [
+        {
+          id: "report-1",
+          name: "Monthly donations",
+          reportType: "monthly-donations",
+          filters: {
+            currency: "USD",
+            projectId: "project-water",
+            invalid: 42,
+          },
+          updatedAt: "2026-07-15T00:00:00.000Z",
+          ignored: "value",
+        },
+        {
+          id: "report-2",
+          reportType: "monthly-expenses",
+          filters: {},
+        },
+      ],
+    });
+
+    expect(migrated.reports).toEqual([
+      {
+        id: "report-1",
+        name: "Monthly donations",
+        reportType: "monthly-donations",
+        filters: {
+          currency: "USD",
+          projectId: "project-water",
+        },
+        updatedAt: "2026-07-15T00:00:00.000Z",
+      },
+    ]);
+    expect(() => localWorkspaceSchema.parse(migrated)).not.toThrow();
+  });
 });

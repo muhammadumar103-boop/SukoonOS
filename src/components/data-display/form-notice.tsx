@@ -1,7 +1,9 @@
 import { cn } from "@/lib/utils";
 
+export type FormNoticeTone = "error" | "success" | "info";
+
 type FormNoticeProps = {
-  tone: "error" | "success" | "info";
+  tone: FormNoticeTone;
   message: string;
 };
 
@@ -12,5 +14,13 @@ const toneClasses: Record<FormNoticeProps["tone"], string> = {
 };
 
 export function FormNotice({ tone, message }: FormNoticeProps) {
-  return <div className={cn("rounded-md border px-3 py-2 text-sm", toneClasses[tone])}>{message}</div>;
+  return (
+    <div
+      aria-live={tone === "error" ? "assertive" : "polite"}
+      className={cn("rounded-md border px-3 py-2 text-sm", toneClasses[tone])}
+      role={tone === "error" ? "alert" : "status"}
+    >
+      {message}
+    </div>
+  );
 }

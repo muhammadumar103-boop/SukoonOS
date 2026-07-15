@@ -2,6 +2,7 @@
 
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { DatabaseZap, Download, RotateCcw, Trash2, Upload } from "lucide-react";
+import { FormNotice, type FormNoticeTone } from "@/components/data-display/form-notice";
 import { exportExpenseProofBackup, importExpenseProofBackup } from "@/lib/local-data/expense-proofs";
 import {
   exportLocalWorkspace,
@@ -10,6 +11,13 @@ import {
   maxLocalWorkspaceImportBytes,
   resetLocalWorkspace,
 } from "@/lib/local-data/repository";
+import { triggerDownload } from "@/lib/ui/downloads";
+import { readTransientNotice, writeTransientNotice } from "@/lib/ui/transient-notice";
+
+type NoticeState = {
+  message: string;
+  tone: FormNoticeTone;
+};
 
 export function LocalWorkspaceBanner() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -17,6 +25,7 @@ export function LocalWorkspaceBanner() {
   const [hydrated, setHydrated] = useState(false);
   const [sampleDataEnabled, setSampleDataEnabled] = useState(true);
   const [counts, setCounts] = useState({ expenses: 0, donations: 0, transfers: 0, accounts: 0, budgets: 0, donors: 0, financialRecords: 0 });
+  const [notice, setNotice] = useState<NoticeState | null>(null);
 
   useEffect(() => {
     const workspace = loadLocalWorkspace();
@@ -30,6 +39,7 @@ export function LocalWorkspaceBanner() {
       donors: workspace.donors.length,
       financialRecords: workspace.financialRecords.length,
     });
+    setNotice(readTransientNotice());
     setHydrated(true);
   }, []);
 
@@ -42,20 +52,26 @@ export function LocalWorkspaceBanner() {
       return;
     }
 
+    writeTransientNotice({
+      tone: "success",
+      message: nextSampleState
+        ? "Fresh sample data replaced the previous browser workspace. A backup was saved first."
+        : "The browser workspace was cleared after saving a backup of the previous records.",
+    });
     resetLocalWorkspace({ sampleData: nextSampleState });
     window.location.reload();
   }
 
   function handleExport() {
-    const json = exportLocalWorkspace();
-    const blob = new Blob([json], { type: "application/json;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.download = `sukoonos-workspace-${new Date().toISOString().replaceAll(":", "-")}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+    try {
+      const json = exportLocalWorkspace();
+      const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+      triggerDownload(blob, `sukoonos-workspace-${new Date().toISOString().replaceAll(":", "-")}.json`);
+      setNotice({ tone: "success", message: "Workspace JSON exported from this browser." });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The workspace export could not be created.";
+      setNotice({ tone: "error", message });
+    }
   }
 
   async function handleImport(event: ChangeEvent<HTMLInputElement>) {
@@ -77,10 +93,14 @@ export function LocalWorkspaceBanner() {
 
       const text = await file.text();
       importLocalWorkspace(text);
+      writeTransientNotice({
+        tone: "success",
+        message: `Workspace JSON imported from ${file.name}. A browser backup was created first.`,
+      });
       window.location.reload();
     } catch (error) {
       const message = error instanceof Error ? error.message : "The selected file could not be imported.";
-      window.alert(`Workspace import failed: ${message}`);
+      setNotice({ tone: "error", message: `Workspace import failed: ${message}` });
       event.target.value = "";
     }
   }
@@ -89,16 +109,11 @@ export function LocalWorkspaceBanner() {
     try {
       const json = await exportExpenseProofBackup();
       const blob = new Blob([json], { type: "application/json;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-
-      link.href = url;
-      link.download = `sukoonos-expense-proofs-${new Date().toISOString().replaceAll(":", "-")}.json`;
-      link.click();
-      URL.revokeObjectURL(url);
+      triggerDownload(blob, `sukoonos-expense-proofs-${new Date().toISOString().replaceAll(":", "-")}.json`);
+      setNotice({ tone: "success", message: "Expense proof backup exported from this browser." });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Expense proof backup could not be exported.";
-      window.alert(`Expense proof export failed: ${message}`);
+      setNotice({ tone: "error", message: `Expense proof export failed: ${message}` });
     }
   }
 
@@ -119,16 +134,21 @@ export function LocalWorkspaceBanner() {
     try {
       const text = await file.text();
       await importExpenseProofBackup(text);
+      writeTransientNotice({
+        tone: "success",
+        message: `Expense proof backup imported from ${file.name}. A browser backup was created first.`,
+      });
       window.location.reload();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Expense proof backup could not be imported.";
-      window.alert(`Expense proof import failed: ${message}`);
+      setNotice({ tone: "error", message: `Expense proof import failed: ${message}` });
       event.target.value = "";
     }
   }
 
   return (
     <section className="rounded-lg border border-emerald-200 bg-emerald-50/80 p-4 shadow-sm shadow-emerald-950/5">
+      {notice ? <div className="mb-4"><FormNotice message={notice.message} tone={notice.tone} /></div> : null}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-emerald-800">

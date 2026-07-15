@@ -42,6 +42,7 @@ import { expenseImpactsBalances, validateExchangeRateInput, validatePositiveMone
 import { activeProjectOptions, projectLabel } from "@/lib/local-data/projects";
 import { appendAuditLogEntry, loadLocalWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
 import type { LocalProject } from "@/lib/local-data/schema";
+import { triggerDownload } from "@/lib/ui/downloads";
 import { cn } from "@/lib/utils";
 
 type InitialExpense = {
@@ -598,63 +599,63 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
   }
 
   function exportCsv() {
-    const headers = [
-      "Date",
-      "Original Amount",
-      "Original Currency",
-      "Exchange Rate (PKR per USD)",
-      "Converted Amount",
-      "Converted Currency",
-      "PKR Value",
-      "USD Value",
-      "Category",
-      "Project",
-      "Description",
-      "Payment Method",
-      "Paid By",
-      "Receipt Reference",
-      "Bank Transfer / Reference Number",
-      "Proof Status",
-      "Proof Notes",
-      "Attachment Filenames",
-      "Approval Status",
-      "Notes",
-    ];
-    const rows = filteredExpenses.map((expense) => {
-      const amounts = convertedExpenseAmounts(expense);
-      const displayProject = projectLabel(projects, expense);
-      return [
-        expense.date,
-        expense.originalAmount,
-        expense.originalCurrency,
-        expense.exchangeRate,
-        amounts.convertedAmount,
-        amounts.convertedCurrency,
-        amounts.pkr,
-        amounts.usd,
-        expense.category,
-        displayProject,
-        expense.description,
-        expense.paymentMethod,
-        expense.paidBy,
-        expense.receiptReference,
-        expense.transferReference,
-        expenseProofStatusLabel(expense),
-        expense.proofNotes,
-        expenseProofFileNames(expense).join("; "),
-        expense.approvalStatus,
-        expense.notes,
+    try {
+      const headers = [
+        "Date",
+        "Original Amount",
+        "Original Currency",
+        "Exchange Rate (PKR per USD)",
+        "Converted Amount",
+        "Converted Currency",
+        "PKR Value",
+        "USD Value",
+        "Category",
+        "Project",
+        "Description",
+        "Payment Method",
+        "Paid By",
+        "Receipt Reference",
+        "Bank Transfer / Reference Number",
+        "Proof Status",
+        "Proof Notes",
+        "Attachment Filenames",
+        "Approval Status",
+        "Notes",
       ];
-    });
-    const csv = [headers, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.download = `sukoonos-expenses-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+      const rows = filteredExpenses.map((expense) => {
+        const amounts = convertedExpenseAmounts(expense);
+        const displayProject = projectLabel(projects, expense);
+        return [
+          expense.date,
+          expense.originalAmount,
+          expense.originalCurrency,
+          expense.exchangeRate,
+          amounts.convertedAmount,
+          amounts.convertedCurrency,
+          amounts.pkr,
+          amounts.usd,
+          expense.category,
+          displayProject,
+          expense.description,
+          expense.paymentMethod,
+          expense.paidBy,
+          expense.receiptReference,
+          expense.transferReference,
+          expenseProofStatusLabel(expense),
+          expense.proofNotes,
+          expenseProofFileNames(expense).join("; "),
+          expense.approvalStatus,
+          expense.notes,
+        ];
+      });
+      const csv = [headers, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      triggerDownload(blob, `sukoonos-expenses-${new Date().toISOString().slice(0, 10)}.csv`);
+      setNotice({ tone: "success", message: "Expenses CSV exported." });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The expenses CSV could not be exported.";
+      setNotice({ tone: "error", message });
+    }
   }
 
   const availableProjects = activeProjectOptions(projects);
@@ -782,19 +783,17 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
     }
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setNotice({
+      tone: "success",
+      message: mode === "open" ? `${attachment.fileName} opened in a new tab.` : `${attachment.fileName} downloaded from this browser.`,
+    });
   }
 
   async function handleExportProofBackup() {
     try {
       const backup = await exportExpenseProofBackup();
       const blob = new Blob([backup], { type: "application/json;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-
-      link.href = url;
-      link.download = `sukoonos-expense-proofs-${new Date().toISOString().replaceAll(":", "-")}.json`;
-      link.click();
-      URL.revokeObjectURL(url);
+      triggerDownload(blob, `sukoonos-expense-proofs-${new Date().toISOString().replaceAll(":", "-")}.json`);
       setNotice({ tone: "success", message: "Expense proof backup exported." });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Expense proof backup could not be exported.";

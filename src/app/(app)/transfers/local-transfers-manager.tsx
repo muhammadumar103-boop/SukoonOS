@@ -10,6 +10,7 @@ import { activeProjectOptions, projectLabel } from "@/lib/local-data/projects";
 import { moneyValues } from "@/lib/local-data/migrations";
 import { loadLocalWorkspace, saveAuditedWorkspace } from "@/lib/local-data/repository";
 import type { LocalProject, LocalTransfer, LocalWorkspace } from "@/lib/local-data/schema";
+import { triggerDownload } from "@/lib/ui/downloads";
 import { cn } from "@/lib/utils";
 
 type TransferStatus = LocalTransfer["status"];
@@ -250,30 +251,30 @@ export function LocalTransfersManager() {
   }
 
   function exportCsv() {
-    const headers = ["Date", "From", "To", "Original Amount", "Original Currency", "Exchange Rate", "PKR Value", "USD Value", "Project", "Reference", "Status", "Notes"];
-    const rows = filteredTransfers.map((transfer) => [
-      transfer.date,
-      accounts.find((account) => account.id === transfer.fromAccountId)?.name ?? transfer.fromAccountId,
-      accounts.find((account) => account.id === transfer.toAccountId)?.name ?? transfer.toAccountId,
-      transfer.originalAmount,
-      transfer.originalCurrency,
-      transfer.exchangeRate,
-      transfer.pkrAmount,
-      transfer.usdAmount,
-      projectLabel(projects, transfer),
-      transfer.reference,
-      transfer.status,
-      transfer.notes,
-    ]);
-    const csv = [headers, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.download = `sukoonos-transfers-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    try {
+      const headers = ["Date", "From", "To", "Original Amount", "Original Currency", "Exchange Rate", "PKR Value", "USD Value", "Project", "Reference", "Status", "Notes"];
+      const rows = filteredTransfers.map((transfer) => [
+        transfer.date,
+        accounts.find((account) => account.id === transfer.fromAccountId)?.name ?? transfer.fromAccountId,
+        accounts.find((account) => account.id === transfer.toAccountId)?.name ?? transfer.toAccountId,
+        transfer.originalAmount,
+        transfer.originalCurrency,
+        transfer.exchangeRate,
+        transfer.pkrAmount,
+        transfer.usdAmount,
+        projectLabel(projects, transfer),
+        transfer.reference,
+        transfer.status,
+        transfer.notes,
+      ]);
+      const csv = [headers, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      triggerDownload(blob, `sukoonos-transfers-${new Date().toISOString().slice(0, 10)}.csv`);
+      setNotice({ tone: "success", message: "Transfers CSV exported." });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The transfers CSV could not be exported.";
+      setNotice({ tone: "error", message });
+    }
   }
 
   const availableProjects = activeProjectOptions(projects);

@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Download, FileJson, Search } from "lucide-react";
+import { FormNotice } from "@/components/data-display/form-notice";
 import { expenseCategories } from "@/lib/finance/local-finance";
 import { generateReport, reportTypes, type ReportFilters, type ReportType } from "@/lib/local-data/reporting";
 import { loadLocalWorkspace } from "@/lib/local-data/repository";
+import { triggerDownload } from "@/lib/ui/downloads";
 import type { LocalWorkspace } from "@/lib/local-data/schema";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +31,7 @@ export function LocalReportsManager() {
   const [workspace, setWorkspace] = useState<LocalWorkspace | null>(null);
   const [reportType, setReportType] = useState<ReportType>("monthly-donations");
   const [filters, setFilters] = useState<ReportFilters>(emptyFilters);
+  const [notice, setNotice] = useState<{ tone: "error" | "success"; message: string } | null>(null);
 
   useEffect(() => {
     setWorkspace(loadLocalWorkspace());
@@ -45,17 +48,17 @@ export function LocalReportsManager() {
       return;
     }
 
-    const headers = report.columns.map((column) => column.label);
-    const rows = report.rows.map((row) => report.columns.map((column) => row[column.key] ?? ""));
-    const csv = [headers, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.download = report.csvFileName;
-    link.click();
-    URL.revokeObjectURL(url);
+    try {
+      const headers = report.columns.map((column) => column.label);
+      const rows = report.rows.map((row) => report.columns.map((column) => row[column.key] ?? ""));
+      const csv = [headers, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      triggerDownload(blob, report.csvFileName);
+      setNotice({ tone: "success", message: `${report.title} CSV exported.` });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The report CSV could not be exported.";
+      setNotice({ tone: "error", message });
+    }
   }
 
   function exportPayload() {
@@ -63,14 +66,14 @@ export function LocalReportsManager() {
       return;
     }
 
-    const blob = new Blob([JSON.stringify(report.payload, null, 2)], { type: "application/json;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.download = report.csvFileName.replace(/\.csv$/, ".payload.json");
-    link.click();
-    URL.revokeObjectURL(url);
+    try {
+      const blob = new Blob([JSON.stringify(report.payload, null, 2)], { type: "application/json;charset=utf-8" });
+      triggerDownload(blob, report.csvFileName.replace(/\.csv$/, ".payload.json"));
+      setNotice({ tone: "success", message: `${report.title} payload exported.` });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The report payload could not be exported.";
+      setNotice({ tone: "error", message });
+    }
   }
 
   if (!workspace || !report) {
@@ -89,6 +92,7 @@ export function LocalReportsManager() {
   return (
     <div className="space-y-6">
       <section className="rounded-lg border border-emerald-100 bg-white p-5 shadow-sm shadow-emerald-950/5">
+        {notice ? <div className="mb-4"><FormNotice message={notice.message} tone={notice.tone} /></div> : null}
         <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr_1fr]">
           <Field label="Report type">
             <select className={inputClass} onChange={(event) => setReportType(event.target.value as ReportType)} value={reportType}>

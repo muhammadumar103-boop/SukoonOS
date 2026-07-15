@@ -6,6 +6,7 @@ import {
   type LocalDonation,
   type LocalFinancialRecord,
   type LocalProject,
+  type LocalReport,
   type LocalTask,
   type LocalTransfer,
   type LocalWorkspace,
@@ -185,6 +186,14 @@ export const localApprovalSchema = strictObject({
   notes: z.string(),
 }) as z.ZodType<LocalApproval>;
 
+export const localReportSchema = strictObject({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  reportType: z.string().min(1),
+  filters: z.record(z.string()),
+  updatedAt: z.string().min(1),
+}) as z.ZodType<LocalReport>;
+
 export const localWorkspaceSchema = strictObject({
   schemaVersion: z.literal(localWorkspaceSchemaVersion),
   sampleDataEnabled: z.boolean(),
@@ -223,7 +232,7 @@ export const localWorkspaceSchema = strictObject({
   donors: z.array(localDonorSchema),
   tasks: z.array(localTaskSchema),
   approvals: z.array(localApprovalSchema),
-  reports: z.array(z.any()),
+  reports: z.array(localReportSchema),
   auditLog: z.array(
     strictObject({
       id: z.string().min(1),

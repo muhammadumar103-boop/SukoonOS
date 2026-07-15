@@ -11,6 +11,7 @@ import { activeProjectOptions, projectLabel } from "@/lib/local-data/projects";
 import { moneyValues } from "@/lib/local-data/migrations";
 import { loadLocalWorkspace, saveAuditedWorkspace } from "@/lib/local-data/repository";
 import type { LocalDonation, LocalDonor, LocalProject, LocalWorkspace } from "@/lib/local-data/schema";
+import { triggerDownload } from "@/lib/ui/downloads";
 import { cn } from "@/lib/utils";
 
 type DonationStatus = LocalDonation["status"];
@@ -285,31 +286,31 @@ export function LocalDonationsManager() {
   }
 
   function exportCsv() {
-    const headers = ["Date", "Donor", "Original Amount", "Original Currency", "Exchange Rate", "PKR Value", "USD Value", "Project", "Method", "Account", "Receipt", "Status", "Notes"];
-    const rows = filteredDonations.map((donation) => [
-      donation.date,
-      donorLabel(donors, donation),
-      donation.originalAmount,
-      donation.originalCurrency,
-      donation.exchangeRate,
-      donation.pkrAmount,
-      donation.usdAmount,
-      projectLabel(projects, donation),
-      donation.method,
-      accounts.find((account) => account.id === donation.accountId)?.name ?? donation.accountId,
-      donation.receiptReference,
-      donation.status,
-      donation.notes,
-    ]);
-    const csv = [headers, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.download = `sukoonos-donations-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    try {
+      const headers = ["Date", "Donor", "Original Amount", "Original Currency", "Exchange Rate", "PKR Value", "USD Value", "Project", "Method", "Account", "Receipt", "Status", "Notes"];
+      const rows = filteredDonations.map((donation) => [
+        donation.date,
+        donorLabel(donors, donation),
+        donation.originalAmount,
+        donation.originalCurrency,
+        donation.exchangeRate,
+        donation.pkrAmount,
+        donation.usdAmount,
+        projectLabel(projects, donation),
+        donation.method,
+        accounts.find((account) => account.id === donation.accountId)?.name ?? donation.accountId,
+        donation.receiptReference,
+        donation.status,
+        donation.notes,
+      ]);
+      const csv = [headers, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      triggerDownload(blob, `sukoonos-donations-${new Date().toISOString().slice(0, 10)}.csv`);
+      setNotice({ tone: "success", message: "Donations CSV exported." });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The donations CSV could not be exported.";
+      setNotice({ tone: "error", message });
+    }
   }
 
   const availableProjects = activeProjectOptions(projects);

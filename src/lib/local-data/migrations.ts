@@ -24,6 +24,7 @@ import {
   type LocalDonor,
   type LocalFinancialRecord,
   type LocalProject,
+  type LocalReport,
   type LocalTask,
   type LocalTransfer,
   type LocalWorkspace,
@@ -226,6 +227,40 @@ function normalizeApprovals(approvals: unknown[] | undefined): LocalApproval[] {
     : [];
 }
 
+function normalizeReports(reports: unknown[] | undefined): LocalReport[] {
+  return Array.isArray(reports)
+    ? reports.flatMap((report, index) => {
+        const candidate = report as Partial<LocalReport>;
+        const id = candidate.id?.trim() || `report-${Date.now()}-${index + 1}`;
+        const name = candidate.name?.trim();
+        const reportType = candidate.reportType?.trim();
+        const updatedAt = candidate.updatedAt ?? new Date().toISOString();
+        const filters =
+          candidate.filters && typeof candidate.filters === "object"
+            ? Object.fromEntries(
+                Object.entries(candidate.filters).flatMap(([key, value]) =>
+                  typeof value === "string" ? [[key, value]] : [],
+                ),
+              )
+            : {};
+
+        if (!name || !reportType) {
+          return [];
+        }
+
+        return [
+          {
+            id,
+            name,
+            reportType,
+            filters,
+            updatedAt,
+          },
+        ];
+      })
+    : [];
+}
+
 function collectLegacyProjectNames(
   candidate: LegacyLocalWorkspaceInput,
   legacy: LegacyCollections,
@@ -363,7 +398,7 @@ export function migrateLocalWorkspace(input: unknown, legacy: LegacyCollections 
     donors,
     tasks: normalizeTasks(candidate.tasks?.length ? candidate.tasks : sampleDataEnabled ? sampleLocalTasks : []),
     approvals: normalizeApprovals(candidate.approvals?.length ? candidate.approvals : sampleDataEnabled ? sampleLocalApprovals : []),
-    reports: Array.isArray(candidate.reports) ? candidate.reports : [],
+    reports: normalizeReports(candidate.reports),
     auditLog: Array.isArray(candidate.auditLog) ? candidate.auditLog : [],
     settings: candidate.settings && typeof candidate.settings === "object" ? candidate.settings : {},
   };
