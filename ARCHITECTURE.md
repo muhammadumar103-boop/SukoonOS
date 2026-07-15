@@ -145,8 +145,11 @@ The local workspace repository owns:
 - Accounts.
 - Budgets.
 - Future donations, transfers, projects, donors, tasks, approvals, reports, settings, and audit log arrays.
+- Browser-only transient notices for post-reload feedback after local imports or destructive workspace resets.
 
 Legacy localStorage keys remain readable. The migration layer reads old keys, normalizes records, and writes a current workspace shape without deleting existing per-feature data.
+
+Expense proof binaries remain outside localStorage in IndexedDB. Workspace JSON carries only validated metadata, while proof files move through a separate backup export/import flow.
 
 ## Security
 

@@ -27,6 +27,7 @@ These rules are permanent working instructions for SukoonOS contributors and cod
 - Use TypeScript types and validation at every boundary.
 - Prefer shared finance/domain helpers over page-local calculations.
 - Prefer small, reversible migrations over broad rewrites.
+- Any user-facing save, edit, archive, void, delete, upload, import, export, or reset action should surface a visible success or error notice.
 - Keep client-only localStorage code out of server components.
 - Preserve server/client boundaries. Server routes enforce auth and roles in production mode.
 - Avoid duplicate financial data entry. A transaction should create ledger activity; ledger rows should not be independently entered copies.

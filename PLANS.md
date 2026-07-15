@@ -11,6 +11,26 @@ Sprint history has produced a working Next.js 15 app with:
 - Finance page with local bank accounts, cash accounts, budgets, and account balances.
 - Finance Ledger page combining local expenses with demo donations, transfers, refunds, fees, and adjustments.
 - Prisma/Supabase production foundation that must remain intact but is not yet fully aligned with the MVP finance model.
+- Stabilization checkpoints in progress for shared feedback, stricter local validation, and dashboard balance correctness.
+
+## Stabilization Checkpoints
+
+### Checkpoint A: Shared feedback and validation
+
+Status: Complete
+
+- Workspace export/import/reset flows now show visible feedback instead of relying only on browser alerts.
+- Expense proof open/download actions now report success or recovery guidance.
+- Donations, transfers, expenses, and reports now confirm CSV or payload exports visibly.
+- Local report definitions now validate explicitly instead of accepting arbitrary objects.
+
+### Checkpoint B: Dashboard balance correctness
+
+Status: Complete
+
+- Dashboard account balances now use the shared account-balance projection instead of a duplicated local calculation.
+- Non-final transfers no longer distort dashboard balances.
+- Regression coverage now protects dashboard balances against draft/review transfer leakage.
 
 ## Conflicts And Duplication Found
 

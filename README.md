@@ -12,8 +12,11 @@ Current working capabilities include:
 
 - Demo mode without Supabase or database credentials.
 - Professional app shell with dashboard, finance, projects, donations, donors, expenses, transfers, reports, and settings routes.
-- Local expense tracker with browser persistence, edit/delete, search, filters, CSV export, dual PKR/USD values, and historical exchange rates.
-- Finance Ledger and Finance module foundations for accounts, cash, budgets, and balances.
+- Local-first finance workflows for donations, expenses, transfers, accounts, budgets, reports, and ledger review.
+- Local expense tracker with browser persistence, edit/delete, proof attachments, proof backup export/import, search, filters, CSV export, dual PKR/USD values, and historical exchange rates.
+- Workspace JSON export/import with automatic browser backups before destructive resets or imports.
+- Finance Ledger and Finance module foundations for accounts, cash, budgets, balances, and reconciliation checks.
+- Donor CRM and project records with linked local finance activity.
 - Prisma/Supabase production foundation preserved for later migration.
 
 The production database schema is not yet the final MVP schema. Do not claim production readiness until real credentials, migrations, auth, and route behavior are tested.
@@ -56,6 +59,19 @@ npm run dev:clean
 
 Local demo records live only in this browser profile unless you export them from the workspace banner.
 
+## Daily Operations
+
+For the safest day-to-day local workflow:
+
+1. Create or confirm donors before recording donations.
+2. Create projects before linking donations, expenses, or transfers.
+3. Create finance accounts before recording money movement.
+4. Record donations, expenses, and transfers from their dedicated pages.
+5. Export the workspace JSON regularly.
+6. Export expense proofs separately whenever receipts or invoices were added.
+
+See [docs/DAILY-OPERATIONS.md](./docs/DAILY-OPERATIONS.md) for the full local operating checklist.
+
 ## Project Structure
 
 ```text
@@ -94,6 +110,7 @@ docs/               Supporting project documentation
 - [AGENTS.md](./AGENTS.md)
 - [PLANS.md](./PLANS.md)
 - [ARCHITECTURE.md](./ARCHITECTURE.md)
+- [docs/DAILY-OPERATIONS.md](./docs/DAILY-OPERATIONS.md)
 - [PROJECT.md](./PROJECT.md)
 - [ROADMAP.md](./ROADMAP.md)
 - [FEATURES.md](./FEATURES.md)
