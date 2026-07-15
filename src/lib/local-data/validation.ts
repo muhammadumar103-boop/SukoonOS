@@ -14,6 +14,14 @@ import {
 const strictObject = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();
 const currencySchema = z.enum(["PKR", "USD"]);
 const statusSchema = z.enum(["Active", "Review", "Paused"]);
+const localExpenseAttachmentSchema = strictObject({
+  id: z.string().min(1),
+  fileName: z.string().min(1),
+  mimeType: z.string().min(1),
+  sizeBytes: z.number().nonnegative(),
+  kind: z.enum(["Image", "PDF"]),
+  storedAt: z.string().min(1),
+});
 const moneySchema = strictObject({
   originalAmount: z.number().positive(),
   originalCurrency: currencySchema,
@@ -202,8 +210,11 @@ export const localWorkspaceSchema = strictObject({
       paymentMethod: z.string(),
       paidBy: z.string(),
       receiptReference: z.string(),
+      transferReference: z.string(),
       approvalStatus: z.enum(["Draft", "Pending", "Approved", "Paid", "Rejected", "Voided"]),
+      proofNotes: z.string(),
       notes: z.string(),
+      attachments: z.array(localExpenseAttachmentSchema),
     }),
   ),
   donations: z.array(localDonationSchema),

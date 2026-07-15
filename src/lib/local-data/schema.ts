@@ -1,7 +1,7 @@
-import type { Currency, FinanceAccount, FinanceBudget, LocalExpense } from "@/lib/finance/local-finance";
+import type { Currency, FinanceAccount, FinanceBudget, LocalExpense, LocalExpenseAttachmentMeta } from "@/lib/finance/local-finance";
 
 export const localWorkspaceStorageKey = "sukoonos.local.workspace.v1";
-export const localWorkspaceSchemaVersion = 2;
+export const localWorkspaceSchemaVersion = 3;
 export const localWorkspaceBackupsStorageKey = "sukoonos.local.workspace.backups.v1";
 
 export type LocalTransactionType = "Donation" | "Expense" | "Transfer" | "Refund" | "Fee" | "Adjustment";
@@ -166,4 +166,8 @@ export type LocalWorkspace = {
 export type LegacyLocalWorkspaceInput = Partial<LocalWorkspace> & {
   accounts?: FinanceAccount[];
   budgets?: FinanceBudget[];
+};
+
+export type LegacyLocalExpenseInput = Partial<LocalExpense> & {
+  attachments?: Partial<LocalExpenseAttachmentMeta>[];
 };

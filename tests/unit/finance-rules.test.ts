@@ -17,8 +17,11 @@ describe("finance rules", () => {
       paymentMethod: "Card",
       paidBy: "Ops",
       receiptReference: "EXP-1",
+      transferReference: "",
       approvalStatus: "Approved",
+      proofNotes: "",
       notes: "",
+      attachments: [],
     });
 
     expect(signed.pkrAmount).toBe(-30000);

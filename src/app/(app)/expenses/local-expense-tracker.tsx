@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, Pencil, Search, Trash2 } from "lucide-react";
+import { Camera, Download, Eye, FileImage, FileText, Paperclip, Pencil, Search, Trash2, Upload } from "lucide-react";
 import { FormNotice } from "@/components/data-display/form-notice";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import {
@@ -21,11 +21,26 @@ import {
   type ApprovalStatus,
   type Currency,
   type FinanceAccount,
+  type LocalExpenseAttachmentMeta,
   type LocalExpense,
 } from "@/lib/finance/local-finance";
+import {
+  deleteExpenseProofAttachment,
+  expenseHasProof,
+  expenseProofAccept,
+  expenseProofFileNames,
+  expenseProofStatusLabel,
+  exportExpenseProofBackup,
+  formatFileSize,
+  getExpenseProofAttachmentBlob,
+  importExpenseProofBackup,
+  makeExpenseProofRecord,
+  prepareExpenseProofFile,
+  storeExpenseProofAttachment,
+} from "@/lib/local-data/expense-proofs";
 import { expenseImpactsBalances, validateExchangeRateInput, validatePositiveMoneyInput } from "@/lib/local-data/finance-rules";
 import { activeProjectOptions, projectLabel } from "@/lib/local-data/projects";
-import { loadLocalWorkspace, saveAuditedWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
+import { appendAuditLogEntry, loadLocalWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
 import type { LocalProject } from "@/lib/local-data/schema";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +55,10 @@ type InitialExpense = {
 
 type LocalExpenseTrackerProps = {
   initialExpenses: InitialExpense[];
+};
+
+type PendingProof = Awaited<ReturnType<typeof prepareExpenseProofFile>> & {
+  previewUrl: string;
 };
 
 const demoExpenses: LocalExpense[] = [
@@ -57,8 +76,11 @@ const demoExpenses: LocalExpense[] = [
     paymentMethod: "Bank Transfer",
     paidBy: "Ayesha Khan",
     receiptReference: "MA-2041",
+    transferReference: "TXN-2041",
     approvalStatus: "Pending",
+    proofNotes: "Vendor receipt is attached.",
     notes: "Awaiting program lead confirmation.",
+    attachments: [],
   },
   {
     id: "local-expense-2",
@@ -74,8 +96,11 @@ const demoExpenses: LocalExpense[] = [
     paymentMethod: "Card",
     paidBy: "Mariam Khan",
     receiptReference: "EDU-1187",
+    transferReference: "",
     approvalStatus: "Approved",
+    proofNotes: "",
     notes: "Matched to July education budget.",
+    attachments: [],
   },
   {
     id: "local-expense-3",
@@ -91,8 +116,11 @@ const demoExpenses: LocalExpense[] = [
     paymentMethod: "Cheque",
     paidBy: "Bilal Ahmed",
     receiptReference: "FP-7720",
+    transferReference: "CHK-7720",
     approvalStatus: "Paid",
+    proofNotes: "Paper invoice matched to cheque issue.",
     notes: "Vendor payment completed.",
+    attachments: [],
   },
 ];
 
@@ -109,8 +137,11 @@ const emptyForm: Omit<LocalExpense, "id"> = {
   paymentMethod: paymentMethods[0],
   paidBy: "",
   receiptReference: "",
+  transferReference: "",
   approvalStatus: "Pending",
+  proofNotes: "",
   notes: "",
+  attachments: [],
 };
 
 function createId() {
@@ -141,8 +172,11 @@ function normalizeInitialExpense(expense: InitialExpense, index: number): LocalE
     paymentMethod: "Bank Transfer",
     paidBy: "Operations Team",
     receiptReference: `EXP-${String(index + 1).padStart(4, "0")}`,
+    transferReference: "",
     approvalStatus: approvalStatuses.includes(expense.status as ApprovalStatus) ? (expense.status as ApprovalStatus) : "Pending",
+    proofNotes: "",
     notes: "Imported from SukoonOS demo data.",
+    attachments: [],
   };
 }
 
@@ -158,12 +192,19 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
   const [search, setSearch] = useState("");
   const [currencyFilter, setCurrencyFilter] = useState<"All" | Currency>("All");
   const [statusFilter, setStatusFilter] = useState<"All" | ApprovalStatus>("All");
+  const [proofFilter, setProofFilter] = useState<"All" | "Attached" | "Missing">("All");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [projectFilter, setProjectFilter] = useState("All");
   const workspaceRef = useRef<ReturnType<typeof loadLocalWorkspace> | null>(null);
   const [accounts, setAccounts] = useState<FinanceAccount[]>([]);
   const [projects, setProjects] = useState<LocalProject[]>([]);
   const [notice, setNotice] = useState<{ tone: "error" | "success"; message: string } | null>(null);
+  const [pendingProofs, setPendingProofs] = useState<PendingProof[]>([]);
+  const [removedAttachmentIds, setRemovedAttachmentIds] = useState<string[]>([]);
+  const [storedProofPreviewUrls, setStoredProofPreviewUrls] = useState<Record<string, string>>({});
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const proofBackupInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const localWorkspace = loadLocalWorkspace();
@@ -215,8 +256,12 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
         expense.paymentMethod,
         expense.paidBy,
         expense.receiptReference,
+        expense.transferReference,
         expense.approvalStatus,
+        expense.proofNotes,
         expense.notes,
+        expense.attachments.map((attachment) => attachment.fileName).join(" "),
+        expenseHasProof(expense) ? "Proof attached" : "Missing proof",
       ]
         .join(" ")
         .toLowerCase();
@@ -225,11 +270,13 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
         (!query || searchable.includes(query)) &&
         (currencyFilter === "All" || expense.originalCurrency === currencyFilter) &&
         (statusFilter === "All" || expense.approvalStatus === statusFilter) &&
+        (proofFilter === "All" ||
+          (proofFilter === "Attached" ? expenseHasProof(expense) : !expenseHasProof(expense))) &&
         (categoryFilter === "All" || expense.category === categoryFilter) &&
         (projectFilter === "All" || displayProject === projectFilter)
       );
     });
-  }, [categoryFilter, currencyFilter, expenses, projectFilter, projects, search, statusFilter]);
+  }, [categoryFilter, currencyFilter, expenses, projectFilter, projects, proofFilter, search, statusFilter]);
 
   const totals = useMemo(() => {
     const now = new Date();
@@ -256,25 +303,66 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
     );
   }, [expenses]);
 
+  function revokeProofUrls(urls: string[]) {
+    urls.forEach((url) => URL.revokeObjectURL(url));
+  }
+
+  function clearStoredProofPreviews() {
+    setStoredProofPreviewUrls((current) => {
+      revokeProofUrls(Object.values(current));
+      return {};
+    });
+  }
+
+  function clearPendingProofState() {
+    setPendingProofs((current) => {
+      revokeProofUrls(current.map((proof) => proof.previewUrl));
+      return [];
+    });
+    setRemovedAttachmentIds([]);
+    clearStoredProofPreviews();
+  }
+
+  async function loadStoredProofPreviews(attachments: LocalExpenseAttachmentMeta[]) {
+    clearStoredProofPreviews();
+    const nextPreviews: Record<string, string> = {};
+
+    for (const attachment of attachments) {
+      if (attachment.kind !== "Image") {
+        continue;
+      }
+
+      const blob = await getExpenseProofAttachmentBlob(attachment.id);
+      if (blob) {
+        nextPreviews[attachment.id] = URL.createObjectURL(blob);
+      }
+    }
+
+    setStoredProofPreviewUrls(nextPreviews);
+  }
+
   function persistExpenses(
     nextExpenses: LocalExpense[],
-    audit?: { action: string; entityId: string; metadata: Record<string, unknown> },
+    auditEntries: Array<{
+      action: string;
+      entityId: string;
+      entityType: string;
+      metadata: Record<string, unknown>;
+    }> = [],
   ) {
     if (!workspaceRef.current) {
       return;
     }
 
     window.localStorage.setItem(localExpenseStorageKey, JSON.stringify(nextExpenses));
-    const nextWorkspace = { ...workspaceRef.current, expenses: nextExpenses };
-    const savedWorkspace = audit
-      ? saveAuditedWorkspace(nextWorkspace, {
-          entityType: "expense",
-          actor: "Local Demo User",
-          entityId: audit.entityId,
-          action: audit.action,
-          metadata: audit.metadata,
-        })
-      : saveLocalWorkspace(nextWorkspace);
+    let nextWorkspace = { ...workspaceRef.current, expenses: nextExpenses };
+    for (const entry of auditEntries) {
+      nextWorkspace = appendAuditLogEntry(nextWorkspace, {
+        actor: "Local Demo User",
+        ...entry,
+      });
+    }
+    const savedWorkspace = saveLocalWorkspace(nextWorkspace);
 
     workspaceRef.current = savedWorkspace;
     setExpenses(savedWorkspace.expenses);
@@ -302,6 +390,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
 
   function resetForm() {
     const firstProject = activeProjectOptions(projects)[0];
+    clearPendingProofState();
     setForm({
       ...emptyForm,
       projectId: firstProject?.id ?? "",
@@ -310,7 +399,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
     setEditingId(null);
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const selectedProject = projects.find((project) => project.id === form.projectId);
     if (!selectedProject) {
@@ -330,6 +419,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
       return;
     }
 
+    const previousExpense = editingId ? expenses.find((expense) => expense.id === editingId) : null;
     const nextExpense: LocalExpense = {
       id: editingId ?? createId(),
       ...form,
@@ -338,27 +428,97 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
       exchangeRate: Number(form.exchangeRate),
     };
 
+    try {
+      for (const proof of pendingProofs) {
+        await storeExpenseProofAttachment(
+          makeExpenseProofRecord(nextExpense.id, proof.metadata, proof.blob, proof.lastModified),
+        );
+      }
+
+      for (const attachmentId of removedAttachmentIds) {
+        await deleteExpenseProofAttachment(attachmentId);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Expense proof files could not be saved.";
+      setNotice({ tone: "error", message });
+      return;
+    }
+
     const nextExpenses = editingId
       ? expenses.map((expense) => (expense.id === editingId ? nextExpense : expense))
       : [nextExpense, ...expenses];
-    persistExpenses(nextExpenses, {
-      action: editingId ? "updated" : "created",
-      entityId: nextExpense.id,
-      metadata: {
-        accountId: nextExpense.fundingAccountId,
-        projectId: nextExpense.projectId,
-        status: nextExpense.approvalStatus,
+    const auditEntries: Array<{
+      action: string;
+      entityId: string;
+      entityType: string;
+      metadata: Record<string, unknown>;
+    }> = [
+      {
+        action: editingId ? "updated" : "created",
+        entityId: nextExpense.id,
+        entityType: "expense",
+        metadata: {
+          accountId: nextExpense.fundingAccountId,
+          projectId: nextExpense.projectId,
+          status: nextExpense.approvalStatus,
+          proofCount: nextExpense.attachments.length,
+        },
       },
-    });
+    ];
+
+    for (const proof of pendingProofs) {
+      auditEntries.push({
+        action: "attached-proof",
+        entityId: proof.metadata.id,
+        entityType: "expense-proof",
+        metadata: {
+          expenseId: nextExpense.id,
+          fileName: proof.metadata.fileName,
+          mimeType: proof.metadata.mimeType,
+          sizeBytes: proof.metadata.sizeBytes,
+        },
+      });
+    }
+
+    for (const attachmentId of removedAttachmentIds) {
+      const removedAttachment = previousExpense?.attachments.find((attachment) => attachment.id === attachmentId);
+      auditEntries.push({
+        action: "removed-proof",
+        entityId: attachmentId,
+        entityType: "expense-proof",
+        metadata: {
+          expenseId: nextExpense.id,
+          fileName: removedAttachment?.fileName ?? "Unknown proof",
+        },
+      });
+    }
+
+    if (pendingProofs.length && removedAttachmentIds.length) {
+      auditEntries.push({
+        action: "replaced-proof",
+        entityId: nextExpense.id,
+        entityType: "expense",
+        metadata: {
+          addedProofs: pendingProofs.length,
+          removedProofs: removedAttachmentIds.length,
+        },
+      });
+    }
+
+    persistExpenses(nextExpenses, auditEntries);
     setNotice({
       tone: "success",
-      message: editingId ? "Expense updated in the local workspace." : "Expense saved to the local workspace.",
+      message:
+        editingId
+          ? `Expense updated in the local workspace${pendingProofs.length || removedAttachmentIds.length ? " with proof changes." : "."}`
+          : "Expense saved to the local workspace.",
     });
 
     resetForm();
   }
 
   function editExpense(expense: LocalExpense) {
+    clearPendingProofState();
     setForm({
       date: expense.date,
       originalAmount: expense.originalAmount,
@@ -372,10 +532,14 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
       paymentMethod: expense.paymentMethod,
       paidBy: expense.paidBy,
       receiptReference: expense.receiptReference,
+      transferReference: expense.transferReference,
       approvalStatus: expense.approvalStatus,
+      proofNotes: expense.proofNotes,
       notes: expense.notes,
+      attachments: expense.attachments,
     });
     setEditingId(expense.id);
+    void loadStoredProofPreviews(expense.attachments);
   }
 
   function deleteExpense(id: string) {
@@ -402,11 +566,14 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
             }
           : item,
       ),
-      {
-        action: "voided",
-        entityId: expense.id,
-        metadata: { previousStatus: expense.approvalStatus, projectId: expense.projectId },
-      },
+      [
+        {
+          action: "voided",
+          entityId: expense.id,
+          entityType: "expense",
+          metadata: { previousStatus: expense.approvalStatus, projectId: expense.projectId },
+        },
+      ],
     );
     setNotice({ tone: "success", message: "Expense was voided and kept in the local audit trail." });
     if (editingId === id) {
@@ -430,6 +597,10 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
       "Payment Method",
       "Paid By",
       "Receipt Reference",
+      "Bank Transfer / Reference Number",
+      "Proof Status",
+      "Proof Notes",
+      "Attachment Filenames",
       "Approval Status",
       "Notes",
     ];
@@ -451,6 +622,10 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
         expense.paymentMethod,
         expense.paidBy,
         expense.receiptReference,
+        expense.transferReference,
+        expenseProofStatusLabel(expense),
+        expense.proofNotes,
+        expenseProofFileNames(expense).join("; "),
         expense.approvalStatus,
         expense.notes,
       ];
@@ -468,14 +643,215 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
 
   const availableProjects = activeProjectOptions(projects);
   const projectNames = Array.from(new Set(expenses.map((expense) => projectLabel(projects, expense)))).sort();
+  const totalAttachedProofs = expenses.filter((expense) => expenseHasProof(expense)).length;
+  const visibleAttachments = form.attachments.map((attachment) => {
+    const pendingProof = pendingProofs.find((proof) => proof.metadata.id === attachment.id);
+    return {
+      ...attachment,
+      previewUrl: pendingProof?.previewUrl ?? storedProofPreviewUrls[attachment.id] ?? "",
+      pending: Boolean(pendingProof),
+    };
+  });
+
+  async function handleProofSelection(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    if (!files.length) {
+      return;
+    }
+
+    try {
+      const preparedProofs: PendingProof[] = [];
+      let duplicateCount = 0;
+
+      for (const file of files) {
+        const prepared = await prepareExpenseProofFile(file);
+        const duplicate = [...form.attachments, ...preparedProofs.map((proof) => proof.metadata)].some(
+          (attachment) =>
+            attachment.fileName.toLowerCase() === prepared.metadata.fileName.toLowerCase() &&
+            attachment.sizeBytes === prepared.metadata.sizeBytes,
+        );
+
+        if (duplicate) {
+          duplicateCount += 1;
+          continue;
+        }
+
+        preparedProofs.push({
+          ...prepared,
+          previewUrl: prepared.metadata.kind === "Image" ? URL.createObjectURL(prepared.blob) : "",
+        });
+      }
+
+      if (!preparedProofs.length) {
+        setNotice({
+          tone: "error",
+          message: duplicateCount ? "Selected proof files are already attached to this expense." : "No valid proof files were selected.",
+        });
+        return;
+      }
+
+      setPendingProofs((current) => [...current, ...preparedProofs]);
+      setForm((current) => ({
+        ...current,
+        attachments: [...current.attachments, ...preparedProofs.map((proof) => proof.metadata)],
+      }));
+      setNotice({
+        tone: "success",
+        message: `${preparedProofs.length} proof file${preparedProofs.length === 1 ? "" : "s"} added to this expense${duplicateCount ? ` (${duplicateCount} duplicate skipped).` : "."}`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Proof files could not be added.";
+      setNotice({ tone: "error", message });
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  function removeAttachment(attachment: LocalExpenseAttachmentMeta) {
+    const confirmed = window.confirm(`Remove ${attachment.fileName} from this expense proof list?`);
+    if (!confirmed) {
+      return;
+    }
+
+    const pendingProof = pendingProofs.find((proof) => proof.metadata.id === attachment.id);
+    setForm((current) => ({
+      ...current,
+      attachments: current.attachments.filter((item) => item.id !== attachment.id),
+    }));
+    setPendingProofs((current) => {
+      const nextProofs = current.filter((item) => item.metadata.id !== attachment.id);
+      const removed = current.find((item) => item.metadata.id === attachment.id);
+      if (removed?.previewUrl) {
+        URL.revokeObjectURL(removed.previewUrl);
+      }
+      return nextProofs;
+    });
+    if (!pendingProof) {
+      setRemovedAttachmentIds((current) => (current.includes(attachment.id) ? current : [...current, attachment.id]));
+    }
+    setStoredProofPreviewUrls((current) => {
+      if (!current[attachment.id]) {
+        return current;
+      }
+
+      URL.revokeObjectURL(current[attachment.id]);
+      const next = { ...current };
+      delete next[attachment.id];
+      return next;
+    });
+    setNotice({ tone: "success", message: `${attachment.fileName} will be removed when you save this expense.` });
+  }
+
+  async function openAttachment(attachment: LocalExpenseAttachmentMeta, mode: "open" | "download") {
+    const pendingProof = pendingProofs.find((proof) => proof.metadata.id === attachment.id);
+    const blob = pendingProof?.blob ?? (await getExpenseProofAttachmentBlob(attachment.id));
+
+    if (!blob) {
+      setNotice({
+        tone: "error",
+        message: `${attachment.fileName} is not available in this browser. Restore the expense proof backup to recover the file.`,
+      });
+      return;
+    }
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    if (mode === "open") {
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    } else {
+      link.download = attachment.fileName;
+    }
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function handleExportProofBackup() {
+    try {
+      const backup = await exportExpenseProofBackup();
+      const blob = new Blob([backup], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = `sukoonos-expense-proofs-${new Date().toISOString().replaceAll(":", "-")}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setNotice({ tone: "success", message: "Expense proof backup exported." });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Expense proof backup could not be exported.";
+      setNotice({ tone: "error", message });
+    }
+  }
+
+  async function handleImportProofBackup(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Importing an expense proof backup can restore files and metadata for this browser. Continue?",
+    );
+    if (!confirmed) {
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const result = await importExpenseProofBackup(text);
+      setNotice({
+        tone: "success",
+        message: `Expense proof backup imported: ${result.imported} file${result.imported === 1 ? "" : "s"} restored, ${result.linked} metadata link${result.linked === 1 ? "" : "s"} updated.`,
+      });
+      const localWorkspace = loadLocalWorkspace();
+      workspaceRef.current = localWorkspace;
+      setExpenses(localWorkspace.expenses);
+      setAccounts(localWorkspace.financeAccounts);
+      setProjects(localWorkspace.projects);
+      if (editingId) {
+        const refreshedExpense = localWorkspace.expenses.find((expense) => expense.id === editingId);
+        if (refreshedExpense) {
+          setForm({
+            date: refreshedExpense.date,
+            originalAmount: refreshedExpense.originalAmount,
+            originalCurrency: refreshedExpense.originalCurrency,
+            exchangeRate: refreshedExpense.exchangeRate,
+            category: refreshedExpense.category,
+            projectId: refreshedExpense.projectId,
+            project: refreshedExpense.project,
+            fundingAccountId: refreshedExpense.fundingAccountId,
+            description: refreshedExpense.description,
+            paymentMethod: refreshedExpense.paymentMethod,
+            paidBy: refreshedExpense.paidBy,
+            receiptReference: refreshedExpense.receiptReference,
+            transferReference: refreshedExpense.transferReference,
+            approvalStatus: refreshedExpense.approvalStatus,
+            proofNotes: refreshedExpense.proofNotes,
+            notes: refreshedExpense.notes,
+            attachments: refreshedExpense.attachments,
+          });
+          void loadStoredProofPreviews(refreshedExpense.attachments);
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Expense proof backup could not be imported.";
+      setNotice({ tone: "error", message });
+    } finally {
+      event.target.value = "";
+    }
+  }
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <SummaryCard label="PKR total (all expenses)" value={formatMoney(totals.PKR, "PKR")} />
         <SummaryCard label="USD total (all expenses)" value={formatMoney(totals.USD, "USD")} />
         <SummaryCard label="This month PKR value" value={formatMoney(totals.month.PKR, "PKR")} />
         <SummaryCard label="This month USD value" value={formatMoney(totals.month.USD, "USD")} />
+        <SummaryCard label="Expenses with proof attached" value={String(totalAttachedProofs)} />
       </section>
 
       <section className="rounded-lg border border-emerald-100 bg-white p-5 shadow-sm shadow-emerald-950/5">
@@ -588,6 +964,87 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
           <Field label="Receipt reference">
             <input className={inputClass} onChange={(event) => updateForm("receiptReference", event.target.value)} placeholder="Receipt or invoice no." value={form.receiptReference} />
           </Field>
+          <Field label="Bank transfer / reference number">
+            <input className={inputClass} onChange={(event) => updateForm("transferReference", event.target.value)} placeholder="Optional transfer, cheque, or bank ref." value={form.transferReference} />
+          </Field>
+          <Field className="lg:col-span-2" label="Expense proofs">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-950">{expenseProofStatusLabel(form)}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {expenseHasProof(form)
+                      ? `${form.attachments.length} proof file${form.attachments.length === 1 ? "" : "s"} linked to this expense.`
+                      : "Attach receipt images or PDFs. Camera capture is available on supported mobile browsers."}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-emerald-200 bg-white px-4 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                    onClick={() => fileInputRef.current?.click()}
+                    type="button"
+                  >
+                    <Upload className="size-4" aria-hidden="true" />
+                    Add proofs
+                  </button>
+                  <button
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-emerald-200 bg-white px-4 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                    onClick={() => cameraInputRef.current?.click()}
+                    type="button"
+                  >
+                    <Camera className="size-4" aria-hidden="true" />
+                    Use camera
+                  </button>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {visibleAttachments.length ? (
+                  visibleAttachments.map((attachment) => (
+                    <AttachmentCard
+                      key={attachment.id}
+                      attachment={attachment}
+                      onDownload={() => void openAttachment(attachment, "download")}
+                      onOpen={() => void openAttachment(attachment, "open")}
+                      onRemove={() => removeAttachment(attachment)}
+                    />
+                  ))
+                ) : (
+                  <p className="rounded-lg border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500 sm:col-span-2 xl:col-span-3">
+                    No proof files are attached yet.
+                  </p>
+                )}
+              </div>
+              <p className="mt-3 text-xs text-slate-500">
+                Workspace JSON exports metadata only. Use the proof backup export to move actual images and PDFs between browsers.
+              </p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <button
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  onClick={() => void handleExportProofBackup()}
+                  type="button"
+                >
+                  <Download className="size-4" aria-hidden="true" />
+                  Export expense proofs
+                </button>
+                <button
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  onClick={() => proofBackupInputRef.current?.click()}
+                  type="button"
+                >
+                  <Upload className="size-4" aria-hidden="true" />
+                  Import proof backup
+                </button>
+              </div>
+            </div>
+          </Field>
+          <Field className="lg:col-span-2" label="Proof notes">
+            <textarea
+              className={cn(inputClass, "min-h-24 py-3")}
+              onChange={(event) => updateForm("proofNotes", event.target.value)}
+              placeholder="Anything the finance team should know about the attached proof files"
+              value={form.proofNotes}
+            />
+          </Field>
           <Field className="lg:col-span-4" label="Notes">
             <textarea
               className={cn(inputClass, "min-h-24 py-3")}
@@ -641,6 +1098,11 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
               </option>
             ))}
           </select>
+          <select className={inputClass} onChange={(event) => setProofFilter(event.target.value as "All" | "Attached" | "Missing")} value={proofFilter}>
+            <option value="All">All expenses</option>
+            <option value="Attached">Proof attached</option>
+            <option value="Missing">Missing proof</option>
+          </select>
           <button
             className="flex h-10 items-center justify-center gap-2 rounded-md border border-emerald-200 px-4 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
             onClick={exportCsv}
@@ -657,7 +1119,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
               </option>
             ))}
           </select>
-          <p className="self-center text-sm text-slate-500 lg:col-span-3">
+          <p className="self-center text-sm text-slate-500 lg:col-span-2">
             Showing {filteredExpenses.length} of {expenses.length} local expenses
           </p>
         </div>
@@ -675,6 +1137,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
                 <th className="px-5 py-3 font-semibold">Rate</th>
                 <th className="px-5 py-3 font-semibold">Paid by</th>
                 <th className="px-5 py-3 font-semibold">Receipt</th>
+                <th className="px-5 py-3 font-semibold">Proof</th>
                 <th className="px-5 py-3 font-semibold">Status</th>
                 <th className="px-5 py-3 text-right font-semibold">Actions</th>
               </tr>
@@ -702,7 +1165,18 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
                   </td>
                   <td className="px-5 py-4 text-slate-500">{expense.exchangeRate.toLocaleString("en-US")} PKR/USD</td>
                   <td className="px-5 py-4 text-slate-500">{expense.paidBy || "Not set"}</td>
-                  <td className="px-5 py-4 text-slate-500">{expense.receiptReference || "None"}</td>
+                  <td className="px-5 py-4 text-slate-500">
+                    <p>{expense.receiptReference || "None"}</p>
+                    {expense.transferReference ? <p className="mt-1 text-xs text-slate-400">{expense.transferReference}</p> : null}
+                  </td>
+                  <td className="px-5 py-4">
+                    <div className={cn("inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold", expenseHasProof(expense) ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
+                      {expenseProofStatusLabel(expense)}
+                    </div>
+                    <p className="mt-1 max-w-[220px] truncate text-xs text-slate-500">
+                      {expenseProofFileNames(expense).join(", ") || "No attachment files"}
+                    </p>
+                  </td>
                   <td className="px-5 py-4">
                     <StatusBadge value={expense.approvalStatus} />
                   </td>
@@ -731,7 +1205,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
               })}
               {!filteredExpenses.length ? (
                 <tr>
-                  <td className="px-5 py-8 text-center text-slate-500" colSpan={11}>
+                  <td className="px-5 py-8 text-center text-slate-500" colSpan={12}>
                     No expenses match the current filters.
                   </td>
                 </tr>
@@ -740,6 +1214,9 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
           </table>
         </div>
       </section>
+      <input accept={expenseProofAccept} className="hidden" multiple onChange={handleProofSelection} ref={fileInputRef} type="file" />
+      <input accept="image/*,.heic,.heif,image/heic,image/heif" capture="environment" className="hidden" onChange={handleProofSelection} ref={cameraInputRef} type="file" />
+      <input accept="application/json" className="hidden" onChange={handleImportProofBackup} ref={proofBackupInputRef} type="file" />
     </div>
   );
 }
@@ -770,5 +1247,56 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
       <p className="text-sm font-medium text-slate-500">{label}</p>
       <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{value}</p>
     </div>
+  );
+}
+
+function AttachmentCard({
+  attachment,
+  onDownload,
+  onOpen,
+  onRemove,
+}: {
+  attachment: LocalExpenseAttachmentMeta & { pending: boolean; previewUrl: string };
+  onDownload: () => void;
+  onOpen: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <article className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      {attachment.kind === "Image" && attachment.previewUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img alt={attachment.fileName} className="h-36 w-full object-cover" src={attachment.previewUrl} />
+      ) : (
+        <div className="grid h-36 place-items-center bg-slate-50 text-slate-500">
+          {attachment.kind === "PDF" ? <FileText className="size-8" aria-hidden="true" /> : <FileImage className="size-8" aria-hidden="true" />}
+        </div>
+      )}
+      <div className="space-y-3 p-4">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+            <Paperclip className="size-4 text-slate-400" aria-hidden="true" />
+            <span className="truncate">{attachment.fileName}</span>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            {attachment.kind} · {formatFileSize(attachment.sizeBytes)}
+            {attachment.pending ? " · Pending save" : ""}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50" onClick={onOpen} type="button">
+            <Eye className="size-3.5" aria-hidden="true" />
+            Open
+          </button>
+          <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50" onClick={onDownload} type="button">
+            <Download className="size-3.5" aria-hidden="true" />
+            Download
+          </button>
+          <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-red-200 px-3 text-xs font-semibold text-red-700 transition hover:bg-red-50" onClick={onRemove} type="button">
+            <Trash2 className="size-3.5" aria-hidden="true" />
+            Remove
+          </button>
+        </div>
+      </div>
+    </article>
   );
 }

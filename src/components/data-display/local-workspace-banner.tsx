@@ -2,6 +2,7 @@
 
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { DatabaseZap, Download, RotateCcw, Trash2, Upload } from "lucide-react";
+import { exportExpenseProofBackup, importExpenseProofBackup } from "@/lib/local-data/expense-proofs";
 import {
   exportLocalWorkspace,
   importLocalWorkspace,
@@ -12,6 +13,7 @@ import {
 
 export function LocalWorkspaceBanner() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const proofImportInputRef = useRef<HTMLInputElement | null>(null);
   const [sampleDataEnabled, setSampleDataEnabled] = useState(true);
   const [counts, setCounts] = useState({ expenses: 0, donations: 0, transfers: 0, accounts: 0, budgets: 0, donors: 0, financialRecords: 0 });
 
@@ -81,6 +83,48 @@ export function LocalWorkspaceBanner() {
     }
   }
 
+  async function handleProofExport() {
+    try {
+      const json = await exportExpenseProofBackup();
+      const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = `sukoonos-expense-proofs-${new Date().toISOString().replaceAll(":", "-")}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Expense proof backup could not be exported.";
+      window.alert(`Expense proof export failed: ${message}`);
+    }
+  }
+
+  async function handleProofImport(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Importing expense proofs will restore files and any missing proof metadata after creating a browser backup. Continue?",
+    );
+    if (!confirmed) {
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      await importExpenseProofBackup(text);
+      window.location.reload();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Expense proof backup could not be imported.";
+      window.alert(`Expense proof import failed: ${message}`);
+      event.target.value = "";
+    }
+  }
+
   return (
     <section className="rounded-lg border border-emerald-200 bg-emerald-50/80 p-4 shadow-sm shadow-emerald-950/5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -95,6 +139,9 @@ export function LocalWorkspaceBanner() {
               : "This browser is using an empty local workspace. You can keep building from scratch or reload the sample workspace at any time."}
           </p>
           <p className="mt-1 text-xs font-medium text-emerald-900/70">Local demo records exist only in this browser unless you export them.</p>
+          <p className="mt-1 text-xs text-emerald-900/70">
+            Workspace JSON exports include expense-proof metadata only. Use the expense proof backup to move actual images and PDFs.
+          </p>
           <p className="mt-2 text-xs text-emerald-900/70">
             {counts.accounts} accounts, {counts.budgets} budgets, {counts.donations} donations, {counts.transfers} transfers, {counts.financialRecords} other finance records, {counts.expenses} expenses, {counts.donors} donors
           </p>
@@ -111,11 +158,27 @@ export function LocalWorkspaceBanner() {
           </button>
           <button
             className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-emerald-300 bg-white px-4 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100"
+            onClick={() => void handleProofExport()}
+            type="button"
+          >
+            <Download className="size-4" aria-hidden="true" />
+            Export expense proofs
+          </button>
+          <button
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-emerald-300 bg-white px-4 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100"
             onClick={() => importInputRef.current?.click()}
             type="button"
           >
             <Upload className="size-4" aria-hidden="true" />
             Import JSON
+          </button>
+          <button
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-emerald-300 bg-white px-4 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100"
+            onClick={() => proofImportInputRef.current?.click()}
+            type="button"
+          >
+            <Upload className="size-4" aria-hidden="true" />
+            Import expense proofs
           </button>
           <button
             className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-emerald-300 bg-white px-4 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100"
@@ -136,6 +199,7 @@ export function LocalWorkspaceBanner() {
         </div>
       </div>
       <input accept="application/json" className="hidden" onChange={handleImport} ref={importInputRef} type="file" />
+      <input accept="application/json" className="hidden" onChange={handleProofImport} ref={proofImportInputRef} type="file" />
     </section>
   );
 }

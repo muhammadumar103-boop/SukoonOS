@@ -22,8 +22,11 @@ describe("dashboard and reporting totals", () => {
           paymentMethod: "Cash",
           paidBy: "Ops",
           receiptReference: "EXP-1",
+          transferReference: "",
           approvalStatus: "Approved",
+          proofNotes: "",
           notes: "",
+          attachments: [],
         },
         {
           id: "expense-pending",
@@ -39,8 +42,11 @@ describe("dashboard and reporting totals", () => {
           paymentMethod: "Cash",
           paidBy: "Ops",
           receiptReference: "EXP-2",
+          transferReference: "",
           approvalStatus: "Pending",
+          proofNotes: "",
           notes: "",
+          attachments: [],
         },
       ],
     });
@@ -71,8 +77,11 @@ describe("dashboard and reporting totals", () => {
           paymentMethod: "Cash",
           paidBy: "Ops",
           receiptReference: "EXP-1",
+          transferReference: "",
           approvalStatus: "Approved",
+          proofNotes: "",
           notes: "",
+          attachments: [],
         },
         {
           id: "expense-voided",
@@ -88,8 +97,11 @@ describe("dashboard and reporting totals", () => {
           paymentMethod: "Cash",
           paidBy: "Ops",
           receiptReference: "EXP-2",
+          transferReference: "",
           approvalStatus: "Voided",
+          proofNotes: "",
           notes: "",
+          attachments: [],
         },
       ],
     });
@@ -124,6 +136,81 @@ describe("dashboard and reporting totals", () => {
     expect(monthlyExpenses.rows[0]).toMatchObject({
       expenses: 1,
       pkrValue: formatMoney(1000, "PKR"),
+    });
+  });
+
+  it("lists expenses missing proof attachments in the proof report", () => {
+    const workspace = createSampleWorkspace({
+      expenses: [
+        {
+          id: "expense-missing-proof",
+          date: "2026-07-15",
+          originalAmount: 2200,
+          originalCurrency: "PKR",
+          exchangeRate: 278,
+          category: "Food",
+          projectId: "project-food-parcels",
+          project: "Food Parcels",
+          fundingAccountId: "operations-bank-pkr",
+          description: "Needs proof upload",
+          paymentMethod: "Cash",
+          paidBy: "Ops",
+          receiptReference: "EXP-3",
+          transferReference: "",
+          approvalStatus: "Approved",
+          proofNotes: "",
+          notes: "",
+          attachments: [],
+        },
+        {
+          id: "expense-with-proof",
+          date: "2026-07-15",
+          originalAmount: 1800,
+          originalCurrency: "PKR",
+          exchangeRate: 278,
+          category: "Food",
+          projectId: "project-food-parcels",
+          project: "Food Parcels",
+          fundingAccountId: "operations-bank-pkr",
+          description: "Already documented",
+          paymentMethod: "Cash",
+          paidBy: "Ops",
+          receiptReference: "EXP-4",
+          transferReference: "",
+          approvalStatus: "Approved",
+          proofNotes: "",
+          notes: "",
+          attachments: [
+            {
+              id: "proof-1",
+              fileName: "receipt.jpg",
+              mimeType: "image/jpeg",
+              sizeBytes: 1200,
+              kind: "Image",
+              storedAt: "2026-07-15T00:00:00.000Z",
+            },
+          ],
+        },
+      ],
+    });
+
+    const report = generateReport(workspace, "missing-expense-proof", {
+      accountId: "",
+      category: "",
+      currency: "All",
+      dateFrom: "",
+      dateTo: "",
+      donorId: "",
+      projectId: "",
+      search: "",
+      status: "",
+    });
+
+    expect(report.rows).toHaveLength(1);
+    expect(report.rows[0]).toMatchObject({
+      description: "Needs proof upload",
+      proofStatus: "Missing proof",
+      attachmentFiles: "None",
     });
   });
 });

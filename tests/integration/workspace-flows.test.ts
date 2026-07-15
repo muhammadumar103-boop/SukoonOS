@@ -131,8 +131,11 @@ describe("local workspace workflows", () => {
             paymentMethod: "Cash",
             paidBy: "Ops",
             receiptReference: "EXP-1001",
+            transferReference: "",
             approvalStatus: "Pending",
+            proofNotes: "",
             notes: "",
+            attachments: [],
           },
         ],
         transfers: [

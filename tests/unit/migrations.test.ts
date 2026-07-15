@@ -37,5 +37,7 @@ describe("workspace migrations", () => {
     expect(migrated.expenses[0]?.originalAmount).toBe(2500);
     expect(migrated.expenses[0]?.category).toBe("Transportation");
     expect(migrated.expenses[0]?.projectId).toBe("project-hospital");
+    expect(migrated.expenses[0]?.attachments).toEqual([]);
+    expect(migrated.expenses[0]?.proofNotes).toBe("");
   });
 });

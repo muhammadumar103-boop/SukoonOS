@@ -80,8 +80,11 @@ describe("ledger projections", () => {
         paymentMethod: "Card",
         paidBy: "Ops",
         receiptReference: "EXP-1",
+        transferReference: "",
         approvalStatus: "Approved",
+        proofNotes: "",
         notes: "",
+        attachments: [],
       },
       {
         id: "expense-2",
@@ -97,8 +100,11 @@ describe("ledger projections", () => {
         paymentMethod: "Card",
         paidBy: "Ops",
         receiptReference: "EXP-2",
+        transferReference: "",
         approvalStatus: "Pending",
+        proofNotes: "",
         notes: "",
+        attachments: [],
       },
     ];
     workspace.transfers = [

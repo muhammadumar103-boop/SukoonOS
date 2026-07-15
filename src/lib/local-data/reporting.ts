@@ -1,6 +1,7 @@
 import { accountBalanceFromLedger, buildFinanceLedger } from "@/lib/finance/ledger";
 import { convertedExpenseAmounts, formatMoney, type Currency } from "@/lib/finance/local-finance";
 import { donorLabel, deriveDonorRows } from "@/lib/local-data/donors";
+import { expenseHasProof, expenseProofFileNames, expenseProofStatusLabel } from "@/lib/local-data/expense-proofs";
 import { donationImpactsBalances, expenseImpactsBalances, transferImpactsBalances } from "@/lib/local-data/finance-rules";
 import { deriveProjectRows, projectLabel } from "@/lib/local-data/projects";
 import { deriveApprovalRows } from "@/lib/local-data/workflows";
@@ -15,6 +16,7 @@ export const reportTypes = [
   { id: "transfer-history", label: "Transfer history" },
   { id: "donor-giving", label: "Donor giving" },
   { id: "missing-receipts", label: "Missing receipts" },
+  { id: "missing-expense-proof", label: "Missing expense proof" },
   { id: "pending-approvals", label: "Pending approvals" },
   { id: "dual-currency-totals", label: "Dual-currency totals" },
   { id: "annual-charity-summary", label: "Annual charity finance summary" },
@@ -486,6 +488,53 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
       ],
       rows,
       [{ label: "Visible missing receipts", value: String(rows.length) }],
+      filters,
+    );
+  }
+
+  if (type === "missing-expense-proof") {
+    const rows = filterRowsBySearch(
+      workspace.expenses
+        .filter((expense) =>
+          inDateRange(expense.date, filters) &&
+          !expenseHasProof(expense) &&
+          (filters.projectId ? expense.projectId === filters.projectId : true) &&
+          (filters.accountId ? expense.fundingAccountId === filters.accountId : true) &&
+          (filters.category ? expense.category === filters.category : true) &&
+          (filters.status ? expense.approvalStatus === filters.status : true) &&
+          (filters.currency === "All" || expense.originalCurrency === filters.currency),
+        )
+        .map((expense) => ({
+          date: expense.date,
+          description: expense.description || expense.category,
+          project: projectLabel(workspace.projects, expense),
+          category: expense.category,
+          amountPkr: formatMoney(convertedExpenseAmounts(expense).pkr, "PKR"),
+          amountUsd: formatMoney(convertedExpenseAmounts(expense).usd, "USD"),
+          proofStatus: expenseProofStatusLabel(expense),
+          attachmentFiles: expenseProofFileNames(expense).join(", ") || "None",
+          status: expense.approvalStatus,
+        })),
+      filters.search,
+    );
+
+    return reportResult(
+      type,
+      "Missing expense proof",
+      "Expenses that still need receipt or proof attachments in the local workspace.",
+      [
+        { key: "date", label: "Date" },
+        { key: "description", label: "Description" },
+        { key: "project", label: "Project" },
+        { key: "category", label: "Category" },
+        { key: "amountPkr", label: "PKR value", align: "right" },
+        { key: "amountUsd", label: "USD value", align: "right" },
+        { key: "proofStatus", label: "Proof status" },
+        { key: "attachmentFiles", label: "Attachment files" },
+        { key: "status", label: "Status" },
+      ],
+      rows,
+      [{ label: "Expenses missing proof", value: String(rows.length) }],
       filters,
     );
   }

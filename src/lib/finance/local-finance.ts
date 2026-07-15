@@ -17,6 +17,17 @@ export type FinanceAccount = {
 
 export type BudgetPeriod = "Monthly" | "Quarterly" | "Annual";
 
+export type ExpenseProofKind = "Image" | "PDF";
+
+export type LocalExpenseAttachmentMeta = {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  kind: ExpenseProofKind;
+  storedAt: string;
+};
+
 export type FinanceBudget = {
   id: string;
   name: string;
@@ -43,8 +54,11 @@ export type LocalExpense = {
   paymentMethod: string;
   paidBy: string;
   receiptReference: string;
+  transferReference: string;
   approvalStatus: ApprovalStatus;
+  proofNotes: string;
   notes: string;
+  attachments: LocalExpenseAttachmentMeta[];
 };
 
 export const localExpenseStorageKey = "sukoonos.local.expenses.v1";
@@ -236,8 +250,20 @@ export function normalizeLocalExpense(expense: LegacyLocalExpense): LocalExpense
     paymentMethod: currentExpense.paymentMethod ?? paymentMethods[0],
     paidBy: currentExpense.paidBy ?? "",
     receiptReference: currentExpense.receiptReference ?? "",
+    transferReference: currentExpense.transferReference ?? "",
     approvalStatus: currentExpense.approvalStatus ?? "Pending",
+    proofNotes: currentExpense.proofNotes ?? "",
     notes: currentExpense.notes ?? "",
+    attachments: Array.isArray(currentExpense.attachments)
+      ? currentExpense.attachments.map((attachment) => ({
+          id: attachment.id ?? `attachment-${Date.now()}`,
+          fileName: attachment.fileName ?? "Proof file",
+          mimeType: attachment.mimeType ?? "application/octet-stream",
+          sizeBytes: Number(attachment.sizeBytes ?? 0),
+          kind: attachment.kind === "PDF" ? "PDF" : "Image",
+          storedAt: attachment.storedAt ?? new Date().toISOString(),
+        }))
+      : [],
   };
 }
 
