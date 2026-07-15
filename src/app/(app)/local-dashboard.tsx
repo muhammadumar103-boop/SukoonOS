@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ClipboardCheck, Clock3, HandHeart, Landmark, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { BarChart } from "@/components/charts/bar-chart";
 import { DonutChart } from "@/components/charts/donut-chart";
+import { FormNotice } from "@/components/data-display/form-notice";
 import { MetricCard } from "@/components/data-display/metric-card";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { appendAuditLogEntry, loadLocalWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
@@ -61,6 +62,8 @@ export function LocalDashboard() {
   const [workspace, setWorkspace] = useState<LocalWorkspace | null>(null);
   const [taskForm, setTaskForm] = useState<TaskFormState>(emptyTaskForm);
   const [approvalForm, setApprovalForm] = useState<ApprovalFormState>(emptyApprovalForm);
+  const [taskNotice, setTaskNotice] = useState<{ tone: "error" | "success"; message: string } | null>(null);
+  const [approvalNotice, setApprovalNotice] = useState<{ tone: "error" | "success"; message: string } | null>(null);
 
   useEffect(() => {
     const loadedWorkspace = loadLocalWorkspace();
@@ -104,7 +107,12 @@ export function LocalDashboard() {
 
   function handleCreateTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!workspace || !taskForm.title.trim()) {
+    if (!workspace) {
+      return;
+    }
+
+    if (!taskForm.title.trim()) {
+      setTaskNotice({ tone: "error", message: "Enter a task title before saving to the queue." });
       return;
     }
 
@@ -131,6 +139,7 @@ export function LocalDashboard() {
       },
     );
 
+    setTaskNotice({ tone: "success", message: "Task added to the local dashboard queue." });
     setTaskForm((current) => ({ ...emptyTaskForm, assignedUser: current.assignedUser, projectId: current.projectId, dueDate: emptyTaskForm.dueDate }));
   }
 
@@ -151,6 +160,8 @@ export function LocalDashboard() {
         metadata: { status: nextStatus },
       },
     );
+
+    setTaskNotice({ tone: "success", message: nextStatus === "Done" ? "Task marked complete." : "Task status updated." });
   }
 
   function deleteManualTask(taskId: string) {
@@ -175,6 +186,8 @@ export function LocalDashboard() {
         metadata: {},
       },
     );
+
+    setTaskNotice({ tone: "success", message: "Task removed from the local queue." });
   }
 
   function completeDonorReminder(donorId: string) {
@@ -209,11 +222,18 @@ export function LocalDashboard() {
         metadata: {},
       },
     );
+
+    setTaskNotice({ tone: "success", message: "Donor reminder marked complete." });
   }
 
   function handleCreateProjectApproval(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!workspace || !approvalForm.projectId) {
+    if (!workspace) {
+      return;
+    }
+
+    if (!approvalForm.projectId) {
+      setApprovalNotice({ tone: "error", message: "Choose a project before requesting approval." });
       return;
     }
 
@@ -242,6 +262,7 @@ export function LocalDashboard() {
       },
     );
 
+    setApprovalNotice({ tone: "success", message: "Project approval request added to the queue." });
     setApprovalForm((current) => ({ ...emptyApprovalForm, projectId: current.projectId, requestedBy: current.requestedBy }));
   }
 
@@ -263,6 +284,7 @@ export function LocalDashboard() {
           metadata: { decision },
         },
       );
+      setApprovalNotice({ tone: "success", message: `Expense ${decision === "Approved" ? "approved" : "rejected"}.` });
       return;
     }
 
@@ -279,6 +301,7 @@ export function LocalDashboard() {
           metadata: { decision },
         },
       );
+      setApprovalNotice({ tone: "success", message: `Transfer ${decision === "Approved" ? "approved" : "rejected"}.` });
       return;
     }
 
@@ -303,6 +326,7 @@ export function LocalDashboard() {
         metadata: { decision, sourceType },
       },
     );
+    setApprovalNotice({ tone: "success", message: `Approval request ${decision === "Approved" ? "approved" : "rejected"}.` });
   }
 
   if (!workspace || !dashboard) {
@@ -423,14 +447,19 @@ export function LocalDashboard() {
           </div>
 
           <form className="mt-5 grid gap-3 rounded-lg border border-slate-100 p-4" onSubmit={handleCreateProjectApproval}>
+            {approvalNotice ? <FormNotice message={approvalNotice.message} tone={approvalNotice.tone} /> : null}
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Project">
                 <select className={inputClass} onChange={(event) => updateApprovalForm("projectId", event.target.value)} value={approvalForm.projectId}>
-                  {visibleProjects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
+                  {visibleProjects.length ? (
+                    visibleProjects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">Create a project first</option>
+                  )}
                 </select>
               </Field>
               <Field label="Requested by">
@@ -440,7 +469,7 @@ export function LocalDashboard() {
             <Field label="Approval notes">
               <input className={inputClass} onChange={(event) => updateApprovalForm("notes", event.target.value)} placeholder="Explain what needs review" value={approvalForm.notes} />
             </Field>
-            <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800" type="submit">
+            <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300" disabled={!visibleProjects.length} type="submit">
               <Plus className="size-4" aria-hidden="true" />
               Request project approval
             </button>
@@ -483,6 +512,7 @@ export function LocalDashboard() {
           </div>
 
           <form className="mt-5 grid gap-3 rounded-lg border border-slate-100 p-4" onSubmit={handleCreateTask}>
+            {taskNotice ? <FormNotice message={taskNotice.message} tone={taskNotice.tone} /> : null}
             <Field label="Task title">
               <input className={inputClass} onChange={(event) => updateTaskForm("title", event.target.value)} placeholder="Prepare donor update pack" value={taskForm.title} />
             </Field>

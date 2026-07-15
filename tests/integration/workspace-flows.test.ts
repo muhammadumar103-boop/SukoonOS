@@ -93,7 +93,7 @@ describe("local workspace workflows", () => {
       storage,
     );
 
-    workspace = saveLocalWorkspace(
+    saveLocalWorkspace(
       {
         ...workspace,
         donations: [

@@ -83,3 +83,9 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+@layer components {
+  .table-scroll {
+    @apply max-w-full overflow-x-auto overscroll-x-contain;
+  }
+}

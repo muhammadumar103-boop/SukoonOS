@@ -1,4 +1,3 @@
-import { DeferredAction } from "@/components/data-display/deferred-action";
 import { LocalWorkspaceBanner } from "@/components/data-display/local-workspace-banner";
 import { PageHeader } from "@/components/data-display/page-header";
 import { ProgressBar } from "@/components/data-display/progress-bar";
@@ -28,7 +27,6 @@ export default async function ProjectsPage() {
       <PageHeader
         title="Projects"
         description="Track program budgets, delivery progress, owners, and projects that need operational attention."
-        action={<DeferredAction label="Coming in Milestone 3" />}
       />
       <section className="grid gap-4 lg:grid-cols-2">
         {projects.map((project) => (

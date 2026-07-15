@@ -48,6 +48,14 @@ Run the development server:
 npm run dev
 ```
 
+If the local development cache gets into a bad state and routes start failing with missing chunk or `_document` errors, start from a clean cache:
+
+```bash
+npm run dev:clean
+```
+
+Local demo records live only in this browser profile unless you export them from the workspace banner.
+
 ## Project Structure
 
 ```text

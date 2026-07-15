@@ -187,7 +187,7 @@ export function LocalReportsManager() {
           ))}
         </div>
 
-        <div className="mt-5 overflow-x-auto rounded-lg border border-slate-100">
+        <div className="table-scroll mt-5 rounded-lg border border-slate-100">
           <table className="w-full min-w-[860px] text-left text-sm">
             <thead className="bg-emerald-50 text-xs uppercase tracking-wide text-emerald-800">
               <tr>

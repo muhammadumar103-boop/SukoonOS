@@ -1,5 +1,4 @@
 import { PageHeader } from "@/components/data-display/page-header";
-import { DeferredAction } from "@/components/data-display/deferred-action";
 import { LocalWorkspaceBanner } from "@/components/data-display/local-workspace-banner";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { isDemoMode } from "@/config/runtime";
@@ -27,7 +26,6 @@ export default async function DonorsPage() {
       <PageHeader
         title="Donors CRM"
         description="A relationship-first view of donor health, giving history, contacts, and stewardship priority."
-        action={<DeferredAction label="Coming in Milestone 4" />}
       />
       <section className="grid gap-4 xl:grid-cols-4">
         {summary.map((item) => {

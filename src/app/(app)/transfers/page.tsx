@@ -1,5 +1,4 @@
 import { ArrowRight } from "lucide-react";
-import { DeferredAction } from "@/components/data-display/deferred-action";
 import { PageHeader } from "@/components/data-display/page-header";
 import { LocalWorkspaceBanner } from "@/components/data-display/local-workspace-banner";
 import { StatusBadge } from "@/components/data-display/status-badge";
@@ -28,7 +27,6 @@ export default async function TransfersPage() {
       <PageHeader
         title="Transfers"
         description="Coordinate internal fund movement between charity accounts, reserves, programs, and field operations."
-        action={<DeferredAction label="Coming in Milestone 4" />}
       />
       <section className="space-y-4">
         {transfers.map((transfer) => (

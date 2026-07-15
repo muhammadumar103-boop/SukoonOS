@@ -28,7 +28,7 @@ describe("finance rules", () => {
   });
 
   it("keeps non-final donations out of balances and flips refunded donations negative", () => {
-    const processing = donationSignedAmounts({
+    const processingDonation = {
       id: "donation-processing",
       donorId: "donor-1",
       donorName: "Donor",
@@ -45,9 +45,10 @@ describe("finance rules", () => {
       exchangeRate: 280,
       pkrAmount: 140000,
       usdAmount: 500,
-    });
+    } as const;
+    const processing = donationSignedAmounts(processingDonation);
     const refunded = donationSignedAmounts({
-      ...processing,
+      ...processingDonation,
       id: "donation-refunded",
       status: "Refunded",
     });
@@ -63,7 +64,7 @@ describe("finance rules", () => {
     expect(transferImpactsBalances({ status: "Scheduled" })).toBe(false);
     expect(transferImpactsBalances({ status: "Completed" })).toBe(true);
 
-    const fee = financialRecordSignedAmounts({
+    const feeRecord = {
       id: "fee-1",
       type: "Fee",
       accountId: "operations-bank-pkr",
@@ -81,9 +82,10 @@ describe("finance rules", () => {
       exchangeRate: 280,
       pkrAmount: 1000,
       usdAmount: 1000 / 280,
-    });
+    } as const;
+    const fee = financialRecordSignedAmounts(feeRecord);
     const draftAdjustment = financialRecordSignedAmounts({
-      ...fee,
+      ...feeRecord,
       id: "adj-1",
       type: "Adjustment",
       status: "Draft",

@@ -533,7 +533,7 @@ export function FinanceModule() {
             <SearchField value={budgetSearch} onChange={setBudgetSearch} placeholder="Search budgets..." />
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="table-scroll">
             <table className="w-full min-w-[920px] text-left text-sm">
               <thead className="bg-emerald-50 text-xs uppercase tracking-wide text-emerald-800">
                 <tr>

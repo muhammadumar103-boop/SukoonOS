@@ -1,5 +1,4 @@
 import { PageHeader } from "@/components/data-display/page-header";
-import { DeferredAction } from "@/components/data-display/deferred-action";
 import { LocalWorkspaceBanner } from "@/components/data-display/local-workspace-banner";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { isDemoMode } from "@/config/runtime";
@@ -27,7 +26,6 @@ export default async function DonationsPage() {
       <PageHeader
         title="Donations"
         description="Monitor incoming contributions, receipt status, fund allocation, and payment methods."
-        action={<DeferredAction label="Coming in Milestone 4" />}
       />
       <section className="rounded-lg border border-emerald-100 bg-white shadow-sm shadow-emerald-950/5">
         <div className="grid gap-4 border-b border-emerald-100 p-5 md:grid-cols-3">
@@ -44,7 +42,7 @@ export default async function DonationsPage() {
             <p className="mt-1 text-2xl font-semibold text-slate-950">{summary.recurringDonors}</p>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="table-scroll">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="bg-emerald-50 text-xs uppercase tracking-wide text-emerald-800">
               <tr>

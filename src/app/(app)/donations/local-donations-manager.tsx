@@ -469,7 +469,7 @@ export function LocalDonationsManager() {
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="table-scroll">
           <table className="w-full min-w-[1120px] text-left text-sm">
             <thead className="bg-emerald-50 text-xs uppercase tracking-wide text-emerald-800">
               <tr>
