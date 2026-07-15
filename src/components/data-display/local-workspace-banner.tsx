@@ -14,6 +14,7 @@ import {
 export function LocalWorkspaceBanner() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const proofImportInputRef = useRef<HTMLInputElement | null>(null);
+  const [hydrated, setHydrated] = useState(false);
   const [sampleDataEnabled, setSampleDataEnabled] = useState(true);
   const [counts, setCounts] = useState({ expenses: 0, donations: 0, transfers: 0, accounts: 0, budgets: 0, donors: 0, financialRecords: 0 });
 
@@ -29,6 +30,7 @@ export function LocalWorkspaceBanner() {
       donors: workspace.donors.length,
       financialRecords: workspace.financialRecords.length,
     });
+    setHydrated(true);
   }, []);
 
   function replaceWorkspace(nextSampleState: boolean) {
@@ -131,20 +133,26 @@ export function LocalWorkspaceBanner() {
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-emerald-800">
             <DatabaseZap className="size-4" aria-hidden="true" />
-            <p className="text-sm font-semibold">{sampleDataEnabled ? "Sample data is active" : "Local empty workspace is active"}</p>
+            <p className="text-sm font-semibold">
+              {hydrated ? (sampleDataEnabled ? "Sample data is active" : "Local empty workspace is active") : "Loading local workspace..."}
+            </p>
           </div>
           <p className="mt-1 text-sm leading-6 text-emerald-900/80">
-            {sampleDataEnabled
+            {hydrated && sampleDataEnabled
               ? "This browser is using seeded SukoonOS finance records for demos. Clearing sample data will replace this local workspace with an empty one after confirmation."
-              : "This browser is using an empty local workspace. You can keep building from scratch or reload the sample workspace at any time."}
+              : hydrated
+                ? "This browser is using an empty local workspace. You can keep building from scratch or reload the sample workspace at any time."
+                : "Checking the records saved in this browser."}
           </p>
           <p className="mt-1 text-xs font-medium text-emerald-900/70">Local demo records exist only in this browser unless you export them.</p>
           <p className="mt-1 text-xs text-emerald-900/70">
             Workspace JSON exports include expense-proof metadata only. Use the expense proof backup to move actual images and PDFs.
           </p>
-          <p className="mt-2 text-xs text-emerald-900/70">
-            {counts.accounts} accounts, {counts.budgets} budgets, {counts.donations} donations, {counts.transfers} transfers, {counts.financialRecords} other finance records, {counts.expenses} expenses, {counts.donors} donors
-          </p>
+          {hydrated ? (
+            <p className="mt-2 text-xs text-emerald-900/70">
+              {counts.accounts} accounts, {counts.budgets} budgets, {counts.donations} donations, {counts.transfers} transfers, {counts.financialRecords} other finance records, {counts.expenses} expenses, {counts.donors} donors
+            </p>
+          ) : null}
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row">

@@ -43,12 +43,20 @@ type LegacyCollections = {
   financeBudgets?: unknown[];
 };
 
+type NormalizeCollectionOptions = {
+  fallbackToDefaults?: boolean;
+};
+
 function nowIso() {
   return new Date().toISOString();
 }
 
-function normalizeAccounts(accounts: unknown[] | undefined): FinanceAccount[] {
-  const source = Array.isArray(accounts) && accounts.length ? accounts : defaultFinanceAccounts;
+function hasArrayValue(value: unknown): value is unknown[] {
+  return Array.isArray(value);
+}
+
+function normalizeAccounts(accounts: unknown[] | undefined, options: NormalizeCollectionOptions = {}): FinanceAccount[] {
+  const source = hasArrayValue(accounts) ? accounts : options.fallbackToDefaults ? defaultFinanceAccounts : [];
   return source.map((account) => normalizeFinanceAccount(account as Partial<FinanceAccount>));
 }
 
@@ -75,8 +83,12 @@ function normalizeExpenses(expenses: unknown[] | undefined, projects: LocalProje
     : [];
 }
 
-function normalizeBudgets(budgets: unknown[] | undefined, projects: LocalProject[]): FinanceBudget[] {
-  const source = Array.isArray(budgets) && budgets.length ? budgets : defaultFinanceBudgets;
+function normalizeBudgets(
+  budgets: unknown[] | undefined,
+  projects: LocalProject[],
+  options: NormalizeCollectionOptions = {},
+): FinanceBudget[] {
+  const source = hasArrayValue(budgets) ? budgets : options.fallbackToDefaults ? defaultFinanceBudgets : [];
   return source.map((budget) => {
     const normalized = normalizeFinanceBudget(budget as Partial<FinanceBudget>);
     const projectReference = resolveProjectReference(projects, normalized);
@@ -219,14 +231,17 @@ function collectLegacyProjectNames(
   legacy: LegacyCollections,
   sampleDataEnabled: boolean,
 ) {
+  const candidateBudgets = legacy.financeBudgets ?? candidate.financeBudgets ?? candidate.budgets;
   const provisionalWorkspace: Pick<LocalWorkspace, "expenses" | "donations" | "transfers" | "financeBudgets" | "projects"> = {
-    expenses: Array.isArray(legacy.expenses ?? candidate.expenses) ? ((legacy.expenses ?? candidate.expenses) as LocalExpense[]) : [],
-    donations: (candidate.donations?.length ? candidate.donations : sampleDataEnabled ? sampleLocalDonations : []) as LocalDonation[],
-    transfers: (candidate.transfers?.length ? candidate.transfers : sampleDataEnabled ? sampleLocalTransfers : []) as LocalTransfer[],
-    financeBudgets: Array.isArray(legacy.financeBudgets ?? candidate.financeBudgets ?? candidate.budgets)
-      ? ((legacy.financeBudgets ?? candidate.financeBudgets ?? candidate.budgets) as FinanceBudget[])
-      : defaultFinanceBudgets,
-    projects: Array.isArray(candidate.projects)
+    expenses: hasArrayValue(legacy.expenses ?? candidate.expenses) ? ((legacy.expenses ?? candidate.expenses) as LocalExpense[]) : [],
+    donations: hasArrayValue(candidate.donations) ? (candidate.donations as LocalDonation[]) : sampleDataEnabled ? sampleLocalDonations : [],
+    transfers: hasArrayValue(candidate.transfers) ? (candidate.transfers as LocalTransfer[]) : sampleDataEnabled ? sampleLocalTransfers : [],
+    financeBudgets: hasArrayValue(candidateBudgets)
+      ? (candidateBudgets as FinanceBudget[])
+      : sampleDataEnabled
+        ? defaultFinanceBudgets
+        : [],
+    projects: hasArrayValue(candidate.projects)
       ? ((candidate.projects as LocalProject[]).map((project) => ({ ...project, archivedAt: project.archivedAt ?? "" })) as LocalProject[])
       : sampleDataEnabled
         ? sampleLocalProjects
@@ -234,6 +249,24 @@ function collectLegacyProjectNames(
   };
 
   return linkedProjectNamesFromWorkspace(provisionalWorkspace);
+}
+
+function isLegacyClearedWorkspace(candidate: LegacyLocalWorkspaceInput) {
+  const auditLog = Array.isArray(candidate.auditLog) ? candidate.auditLog : [];
+  const latestAction = auditLog[0]?.action;
+
+  return (
+    !candidate.sampleDataEnabled &&
+    latestAction === "cleared-sample-data" &&
+    !candidate.donations?.length &&
+    !candidate.expenses?.length &&
+    !candidate.transfers?.length &&
+    !candidate.financialRecords?.length &&
+    !candidate.donors?.length &&
+    !candidate.tasks?.length &&
+    !candidate.approvals?.length &&
+    !candidate.reports?.length
+  );
 }
 
 export function createEmptyWorkspace(): LocalWorkspace {
@@ -244,7 +277,7 @@ export function createEmptyWorkspace(): LocalWorkspace {
     sampleDataEnabled: false,
     createdAt: timestamp,
     updatedAt: timestamp,
-    financeAccounts: defaultFinanceAccounts.map(normalizeFinanceAccount),
+    financeAccounts: [],
     financeBudgets: [],
     expenses: [],
     donations: [],
@@ -278,8 +311,8 @@ export function createSampleWorkspace(legacy: LegacyCollections = {}): LocalWork
   return {
     ...workspace,
     sampleDataEnabled: true,
-    financeAccounts: normalizeAccounts(legacy.financeAccounts),
-    financeBudgets: normalizeBudgets(legacy.financeBudgets, projects),
+    financeAccounts: normalizeAccounts(legacy.financeAccounts, { fallbackToDefaults: true }),
+    financeBudgets: normalizeBudgets(legacy.financeBudgets, projects, { fallbackToDefaults: true }),
     expenses: normalizeExpenses(legacy.expenses, projects),
     donations: normalizeDonations(sampleLocalDonations, projects, donors),
     transfers: normalizeTransfers(sampleLocalTransfers, projects),
@@ -293,10 +326,20 @@ export function createSampleWorkspace(legacy: LegacyCollections = {}): LocalWork
 
 export function migrateLocalWorkspace(input: unknown, legacy: LegacyCollections = {}): LocalWorkspace {
   const timestamp = nowIso();
-  const candidate = (input && typeof input === "object" ? input : {}) as LegacyLocalWorkspaceInput;
+  const rawCandidate = (input && typeof input === "object" ? input : {}) as LegacyLocalWorkspaceInput;
+  const candidate = isLegacyClearedWorkspace(rawCandidate)
+    ? {
+        ...rawCandidate,
+        financeAccounts: [],
+        financeBudgets: [],
+        projects: [],
+      }
+    : rawCandidate;
   const existingExpenses = legacy.expenses ?? candidate.expenses;
   const existingAccounts = legacy.financeAccounts ?? candidate.financeAccounts ?? candidate.accounts;
   const existingBudgets = legacy.financeBudgets ?? candidate.financeBudgets ?? candidate.budgets;
+  const hasExplicitAccounts = hasArrayValue(legacy.financeAccounts) || hasArrayValue(candidate.financeAccounts) || hasArrayValue(candidate.accounts);
+  const hasExplicitBudgets = hasArrayValue(legacy.financeBudgets) || hasArrayValue(candidate.financeBudgets) || hasArrayValue(candidate.budgets);
   const sampleDataEnabled = Boolean(candidate.sampleDataEnabled);
   const existingDonations = candidate.donations?.length ? candidate.donations : sampleDataEnabled ? sampleLocalDonations : [];
   const existingTransfers = candidate.transfers?.length ? candidate.transfers : sampleDataEnabled ? sampleLocalTransfers : [];
@@ -310,8 +353,8 @@ export function migrateLocalWorkspace(input: unknown, legacy: LegacyCollections 
     sampleDataEnabled,
     createdAt: typeof candidate.createdAt === "string" ? candidate.createdAt : timestamp,
     updatedAt: timestamp,
-    financeAccounts: normalizeAccounts(existingAccounts),
-    financeBudgets: normalizeBudgets(existingBudgets, projects),
+    financeAccounts: normalizeAccounts(existingAccounts, { fallbackToDefaults: sampleDataEnabled || !hasExplicitAccounts }),
+    financeBudgets: normalizeBudgets(existingBudgets, projects, { fallbackToDefaults: sampleDataEnabled || !hasExplicitBudgets }),
     expenses: normalizeExpenses(existingExpenses, projects),
     donations: normalizeDonations(existingDonations, projects, donors),
     transfers: normalizeTransfers(existingTransfers, projects),

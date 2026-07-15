@@ -139,7 +139,7 @@ export function LocalDonorsManager() {
       },
     );
 
-    workspaceRef.current = saveLocalWorkspace(savedWorkspace);
+    workspaceRef.current = savedWorkspace;
     setDonors(savedWorkspace.donors);
   }
 
@@ -215,7 +215,7 @@ export function LocalDonorsManager() {
       <section className="rounded-lg border border-emerald-100 bg-white p-5 shadow-sm shadow-emerald-950/5">
         <h2 className="text-lg font-semibold text-slate-950">{editingId ? "Edit donor" : "Add donor"}</h2>
         <p className="mt-1 text-sm text-slate-500">Stored locally in demo mode. Giving totals below are derived from workspace donations.</p>
-        {sampleDataEnabled ? (
+        {hydrated && sampleDataEnabled ? (
           <p className="mt-2 inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Sample donor records are loaded in this browser.</p>
         ) : null}
         {notice ? <div className="mt-4"><FormNotice message={notice.message} tone={notice.tone} /></div> : null}

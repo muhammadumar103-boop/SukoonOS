@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { formatMoney } from "@/lib/finance/local-finance";
 import { deriveDonorRows } from "@/lib/local-data/donors";
+import { deriveDashboardData } from "@/lib/local-data/dashboard";
 import { deriveProjectRows } from "@/lib/local-data/projects";
 import { generateReport } from "@/lib/local-data/reporting";
 import {
@@ -21,6 +23,46 @@ describe("local workspace workflows", () => {
   it("supports donor, project, donation, expense, transfer, task, and approval flows in demo storage", () => {
     const storage = createMemoryStorage();
     let workspace = createEmptyWorkspace();
+
+    expect(workspace.financeAccounts).toHaveLength(0);
+    expect(workspace.financeBudgets).toHaveLength(0);
+    expect(workspace.projects).toHaveLength(0);
+
+    workspace = saveAuditedWorkspace(
+      {
+        ...workspace,
+        financeAccounts: [
+          {
+            id: "main-donations-bank",
+            name: "Main Donations Bank",
+            kind: "Bank",
+            currency: "USD",
+            institution: "Meezan Bank",
+            purpose: "Incoming donor funds",
+            openingBalance: 0,
+            status: "Active",
+          },
+          {
+            id: "operations-bank-pkr",
+            name: "Operations Bank PKR",
+            kind: "Bank",
+            currency: "PKR",
+            institution: "HBL",
+            purpose: "Program delivery",
+            openingBalance: 0,
+            status: "Active",
+          },
+        ],
+      },
+      {
+        entityType: "account",
+        entityId: "main-donations-bank",
+        action: "created",
+        actor: "Test Runner",
+        metadata: {},
+      },
+      storage,
+    );
 
     workspace = saveAuditedWorkspace(
       {
@@ -132,7 +174,7 @@ describe("local workspace workflows", () => {
             paidBy: "Ops",
             receiptReference: "EXP-1001",
             transferReference: "",
-            approvalStatus: "Pending",
+            approvalStatus: "Approved",
             proofNotes: "",
             notes: "",
             attachments: [],
@@ -146,7 +188,7 @@ describe("local workspace workflows", () => {
             projectId: "project-1",
             project: "Food Parcels",
             date: "2026-07-15",
-            status: "Review",
+            status: "Completed",
             reference: "TRF-1001",
             notes: "",
             originalAmount: 100,
@@ -185,18 +227,49 @@ describe("local workspace workflows", () => {
     );
 
     const loaded = loadLocalWorkspace(storage);
+    const dashboard = deriveDashboardData(loaded);
+    const ledger = buildFinanceLedger(loaded);
     const donorRows = deriveDonorRows(loaded.donors, loaded.donations);
     const projectRows = deriveProjectRows(loaded, buildFinanceLedger(loaded));
     const taskRows = deriveTaskRows(loaded);
     const approvalRows = deriveApprovalRows(loaded);
+    const balancesReport = generateReport(loaded, "account-balances", {
+      accountId: "",
+      category: "",
+      currency: "All",
+      dateFrom: "",
+      dateTo: "",
+      donorId: "",
+      projectId: "",
+      search: "",
+      status: "",
+    });
 
     expect(donorRows[0]?.lifetimeUsd).toBe(500);
     expect(projectRows[0]?.donationTotalUsd).toBe(500);
+    expect(projectRows[0]?.expenseTotalPkr).toBe(10000);
+    expect(projectRows[0]?.transferTotalUsd).toBe(100);
     expect(taskRows.map((task) => task.title)).toContain("Send donor update");
-    expect(approvalRows.map((approval) => approval.sourceType)).toEqual(expect.arrayContaining(["Expense", "Transfer", "Project Update"]));
+    expect(approvalRows.map((approval) => approval.sourceType)).toEqual(["Project Update"]);
+    expect(ledger).toHaveLength(3);
+    expect(dashboard.stats.find((stat) => stat.label === "Total Donations")?.value).toContain("$500.00");
+    expect(dashboard.stats.find((stat) => stat.label === "Total Expenses")?.value).toContain(formatMoney(10000, "PKR"));
+    expect(balancesReport.rows.map((row) => row.account)).toEqual(expect.arrayContaining(["Main Donations Bank", "Operations Bank PKR"]));
     expect(donorLinkCounts(loaded, "donor-1").donations).toBe(1);
     expect(projectLinkCounts(loaded, "project-1").donations).toBe(1);
     expect(loaded.auditLog.length).toBeGreaterThanOrEqual(2);
+
+    const workflowExport = exportLocalWorkspace(storage);
+    resetLocalWorkspace({ sampleData: false }, storage);
+    importLocalWorkspace(workflowExport, storage);
+    const restored = loadLocalWorkspace(storage);
+
+    expect(restored.donors).toHaveLength(1);
+    expect(restored.projects).toHaveLength(1);
+    expect(restored.donations).toHaveLength(1);
+    expect(restored.expenses).toHaveLength(1);
+    expect(restored.transfers).toHaveLength(1);
+    expect(restored.financeAccounts).toHaveLength(2);
   });
 
   it("round-trips empty and sample workspaces through export and import", () => {
@@ -208,6 +281,9 @@ describe("local workspace workflows", () => {
     const emptyImported = loadLocalWorkspace(emptyStorage);
 
     expect(emptyImported.sampleDataEnabled).toBe(false);
+    expect(emptyImported.financeAccounts).toHaveLength(0);
+    expect(emptyImported.financeBudgets).toHaveLength(0);
+    expect(emptyImported.projects).toHaveLength(0);
     expect(emptyImported.donations).toHaveLength(0);
 
     const sampleStorage = createMemoryStorage();

@@ -203,12 +203,7 @@ export function resetLocalWorkspace(options: { sampleData: boolean }, storage: B
     metadata: { sampleDataEnabled: options.sampleData },
   });
 
-  if (storage) {
-    storage.setItem(localWorkspaceStorageKey, JSON.stringify(audited));
-    syncLegacyCollections(storage, audited);
-  }
-
-  return audited;
+  return saveLocalWorkspace(audited, storage);
 }
 
 export function clearLocalWorkspace(storage: BrowserStorage | null = browserStorage()) {

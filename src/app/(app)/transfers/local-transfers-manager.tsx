@@ -91,8 +91,8 @@ export function LocalTransfersManager() {
     const defaultProject = activeProjectOptions(workspace.projects)[0];
     setForm((current) => ({
       ...current,
-      fromAccountId: workspace.financeAccounts[0]?.id ?? current.fromAccountId,
-      toAccountId: workspace.financeAccounts[1]?.id ?? current.toAccountId,
+      fromAccountId: workspace.financeAccounts[0]?.id ?? "",
+      toAccountId: workspace.financeAccounts[1]?.id ?? "",
       projectId: defaultProject?.id ?? current.projectId,
     }));
   }, []);
@@ -158,8 +158,8 @@ export function LocalTransfersManager() {
     const firstProject = activeProjectOptions(projects)[0];
     setForm({
       ...emptyForm,
-      fromAccountId: accounts[0]?.id ?? emptyForm.fromAccountId,
-      toAccountId: accounts[1]?.id ?? emptyForm.toAccountId,
+      fromAccountId: accounts[0]?.id ?? "",
+      toAccountId: accounts[1]?.id ?? "",
       projectId: firstProject?.id ?? "",
     });
     setEditingId(null);
@@ -168,8 +168,10 @@ export function LocalTransfersManager() {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const selectedProject = projects.find((project) => project.id === form.projectId);
+    const selectedFromAccount = accounts.find((account) => account.id === form.fromAccountId);
+    const selectedToAccount = accounts.find((account) => account.id === form.toAccountId);
 
-    if (!form.fromAccountId || !form.toAccountId || form.fromAccountId === form.toAccountId || !selectedProject) {
+    if (!selectedFromAccount || !selectedToAccount || selectedFromAccount.id === selectedToAccount.id || !selectedProject) {
       setNotice({ tone: "error", message: "Choose two different accounts and a project before saving a transfer." });
       return;
     }
@@ -188,8 +190,8 @@ export function LocalTransfersManager() {
 
     const nextTransfer: LocalTransfer = {
       id: editingId ?? createId(),
-      fromAccountId: form.fromAccountId,
-      toAccountId: form.toAccountId,
+      fromAccountId: selectedFromAccount.id,
+      toAccountId: selectedToAccount.id,
       projectId: selectedProject.id,
       project: selectedProject.name,
       date: form.date,
@@ -275,6 +277,7 @@ export function LocalTransfersManager() {
   }
 
   const availableProjects = activeProjectOptions(projects);
+  const hasTransferAccounts = accounts.length >= 2;
   const projectNames = Array.from(new Set(transfers.map((transfer) => projectLabel(projects, transfer)))).sort();
 
   return (
@@ -295,22 +298,32 @@ export function LocalTransfersManager() {
             <input className={inputClass} onChange={(event) => updateForm("date", event.target.value)} required type="date" value={form.date} />
           </Field>
           <Field label="From account">
-            <select className={inputClass} onChange={(event) => updateForm("fromAccountId", event.target.value)} value={form.fromAccountId}>
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
+            <select className={inputClass} disabled={!accounts.length} onChange={(event) => updateForm("fromAccountId", event.target.value)} value={form.fromAccountId}>
+              {accounts.length ? (
+                accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))
+              ) : (
+                <option value="">Create an account first</option>
+              )}
             </select>
+            {!accounts.length ? <span className="mt-1 block text-xs text-slate-500">Finance accounts are managed from the Finance page.</span> : null}
           </Field>
           <Field label="To account">
-            <select className={inputClass} onChange={(event) => updateForm("toAccountId", event.target.value)} value={form.toAccountId}>
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
+            <select className={inputClass} disabled={!accounts.length} onChange={(event) => updateForm("toAccountId", event.target.value)} value={form.toAccountId}>
+              {accounts.length ? (
+                accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))
+              ) : (
+                <option value="">Create an account first</option>
+              )}
             </select>
+            {!hasTransferAccounts ? <span className="mt-1 block text-xs text-slate-500">Create at least two finance accounts before moving funds.</span> : null}
           </Field>
           <Field label="Status">
             <select className={inputClass} onChange={(event) => updateForm("status", event.target.value as TransferStatus)} value={form.status}>
@@ -359,8 +372,8 @@ export function LocalTransfersManager() {
             <input className={inputClass} onChange={(event) => updateForm("notes", event.target.value)} placeholder="Reason, approval, or reconciliation details" value={form.notes} />
           </Field>
           <div className="flex flex-col gap-3 sm:flex-row lg:col-span-4">
-            <button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none" disabled={!availableProjects.length}>
-              {!availableProjects.length ? "Create project first" : editingId ? "Save changes" : "Create transfer"}
+            <button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none" disabled={!availableProjects.length || !hasTransferAccounts}>
+              {!hasTransferAccounts ? "Create two accounts first" : !availableProjects.length ? "Create project first" : editingId ? "Save changes" : "Create transfer"}
             </button>
             {editingId ? (
               <button className="h-10 rounded-md border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" onClick={resetForm} type="button">

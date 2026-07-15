@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { migrateLocalWorkspace } from "@/lib/local-data/migrations";
+import { createEmptyWorkspace, migrateLocalWorkspace } from "@/lib/local-data/migrations";
 import { localWorkspaceSchemaVersion } from "@/lib/local-data/schema";
 import { sampleLocalFinancialRecords } from "@/lib/local-data/seeds";
 
@@ -39,5 +39,47 @@ describe("workspace migrations", () => {
     expect(migrated.expenses[0]?.projectId).toBe("project-hospital");
     expect(migrated.expenses[0]?.attachments).toEqual([]);
     expect(migrated.expenses[0]?.proofNotes).toBe("");
+  });
+
+  it("keeps an explicitly empty workspace empty during migration", () => {
+    const migrated = migrateLocalWorkspace(createEmptyWorkspace());
+
+    expect(migrated.sampleDataEnabled).toBe(false);
+    expect(migrated.financeAccounts).toHaveLength(0);
+    expect(migrated.financeBudgets).toHaveLength(0);
+    expect(migrated.projects).toHaveLength(0);
+    expect(migrated.donors).toHaveLength(0);
+  });
+
+  it("heals legacy cleared workspaces that still contain starter scaffolding", () => {
+    const migrated = migrateLocalWorkspace({
+      sampleDataEnabled: false,
+      financeAccounts: [{ id: "main-donations-bank", name: "Main Donations Bank", currency: "USD" }],
+      financeBudgets: [{ id: "budget-1", name: "Starter", project: "Food Parcels", category: "Food", period: "Monthly", currency: "PKR", amount: 1000 }],
+      projects: [{ id: "project-food", name: "Food Parcels", projectType: "Food Parcels" }],
+      donations: [],
+      expenses: [],
+      transfers: [],
+      financialRecords: [],
+      donors: [],
+      tasks: [],
+      approvals: [],
+      reports: [],
+      auditLog: [
+        {
+          id: "audit-1",
+          createdAt: "2026-07-15T00:00:00.000Z",
+          entityType: "workspace",
+          entityId: "local",
+          action: "cleared-sample-data",
+          actor: "Local Demo User",
+          metadata: {},
+        },
+      ],
+    });
+
+    expect(migrated.financeAccounts).toHaveLength(0);
+    expect(migrated.financeBudgets).toHaveLength(0);
+    expect(migrated.projects).toHaveLength(0);
   });
 });

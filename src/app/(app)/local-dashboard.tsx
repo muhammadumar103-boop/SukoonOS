@@ -396,42 +396,52 @@ export function LocalDashboard() {
             <StatusBadge value="Derived" />
           </div>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            {dashboard.accountBalances.map((account) => (
-              <article key={account.id} className="rounded-lg border border-slate-100 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-semibold text-slate-950">{account.name}</h3>
-                    <p className="mt-1 text-sm text-slate-500">{account.kind} · {account.currency}</p>
+            {dashboard.accountBalances.length ? (
+              dashboard.accountBalances.map((account) => (
+                <article key={account.id} className="rounded-lg border border-slate-100 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-semibold text-slate-950">{account.name}</h3>
+                      <p className="mt-1 text-sm text-slate-500">{account.kind} · {account.currency}</p>
+                    </div>
+                    <StatusBadge value={account.status} />
                   </div>
-                  <StatusBadge value={account.status} />
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <BalanceMetric label="Opening" value={formatMoney(account.openingBalance, account.currency)} />
-                  <BalanceMetric label="Current" value={formatMoney(account.balance, account.currency)} />
-                </div>
-              </article>
-            ))}
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <BalanceMetric label="Opening" value={formatMoney(account.openingBalance, account.currency)} />
+                    <BalanceMetric label="Current" value={formatMoney(account.balance, account.currency)} />
+                  </div>
+                </article>
+              ))
+            ) : (
+              <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500 md:col-span-2">
+                No finance accounts exist yet. Add a bank or cash account from Finance to start tracking balances.
+              </p>
+            )}
           </div>
         </div>
 
         <div className="rounded-lg border border-emerald-100 bg-white p-5 shadow-sm shadow-emerald-950/5">
           <h2 className="text-base font-semibold text-slate-950">Project watchlist</h2>
           <div className="mt-5 space-y-4">
-            {dashboard.projectRows.slice(0, 5).map((project) => (
-              <div key={project.id} className="rounded-lg border border-slate-100 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-semibold text-slate-950">{project.name}</h3>
-                    <p className="mt-1 text-sm text-slate-500">{project.projectType} · {project.status}</p>
+            {dashboard.projectRows.length ? (
+              dashboard.projectRows.slice(0, 5).map((project) => (
+                <div key={project.id} className="rounded-lg border border-slate-100 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-semibold text-slate-950">{project.name}</h3>
+                      <p className="mt-1 text-sm text-slate-500">{project.projectType} · {project.status}</p>
+                    </div>
+                    <StatusBadge value={project.remainingUsd < 0 || project.remainingPkr < 0 ? "At Risk" : project.status} />
                   </div>
-                  <StatusBadge value={project.remainingUsd < 0 || project.remainingPkr < 0 ? "At Risk" : project.status} />
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <BalanceMetric label="Donations" value={`${formatMoney(project.donationTotalPkr, "PKR")} / ${formatMoney(project.donationTotalUsd, "USD")}`} />
+                    <BalanceMetric label="Expenses" value={`${formatMoney(project.expenseTotalPkr, "PKR")} / ${formatMoney(project.expenseTotalUsd, "USD")}`} />
+                  </div>
                 </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <BalanceMetric label="Donations" value={`${formatMoney(project.donationTotalPkr, "PKR")} / ${formatMoney(project.donationTotalUsd, "USD")}`} />
-                  <BalanceMetric label="Expenses" value={`${formatMoney(project.expenseTotalPkr, "PKR")} / ${formatMoney(project.expenseTotalUsd, "USD")}`} />
-                </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No projects exist yet. Create a project to begin tracking program activity.</p>
+            )}
           </div>
         </div>
       </section>
@@ -534,7 +544,7 @@ export function LocalDashboard() {
               </Field>
               <Field label="Project">
                 <select className={inputClass} onChange={(event) => updateTaskForm("projectId", event.target.value)} value={taskForm.projectId}>
-                  <option value="">General Operations</option>
+                  <option value="">No linked project</option>
                   {visibleProjects.map((project) => (
                     <option key={project.id} value={project.id}>
                       {project.name}

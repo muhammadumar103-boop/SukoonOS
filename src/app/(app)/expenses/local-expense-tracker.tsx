@@ -212,10 +212,12 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
     setAccounts(localWorkspace.financeAccounts);
     setProjects(localWorkspace.projects);
     const defaultProject = activeProjectOptions(localWorkspace.projects)[0];
+    const defaultAccount = localWorkspace.financeAccounts.find((account) => account.currency === emptyForm.originalCurrency);
     setForm((current) => ({
       ...current,
       projectId: defaultProject?.id ?? current.projectId,
       project: defaultProject?.name ?? current.project,
+      fundingAccountId: defaultAccount?.id ?? "",
     }));
 
     if (localWorkspace.expenses.length) {
@@ -234,6 +236,11 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
       } catch {
         window.localStorage.removeItem(localExpenseStorageKey);
       }
+    }
+
+    if (!localWorkspace.sampleDataEnabled) {
+      setExpenses([]);
+      return;
     }
 
     const seededExpenses = initialExpenses.length ? initialExpenses.map(normalizeInitialExpense) : demoExpenses.map(normalizeLocalExpense);
@@ -376,7 +383,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
     setForm((current) => ({
       ...current,
       originalCurrency: currency,
-      fundingAccountId: defaultFundingAccountId(current.paymentMethod, currency),
+      fundingAccountId: accounts.find((account) => account.currency === currency)?.id ?? "",
     }));
   }
 
@@ -384,17 +391,19 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
     setForm((current) => ({
       ...current,
       paymentMethod,
-      fundingAccountId: defaultFundingAccountId(paymentMethod, current.originalCurrency),
+      fundingAccountId: accounts.find((account) => account.currency === current.originalCurrency)?.id ?? "",
     }));
   }
 
   function resetForm() {
     const firstProject = activeProjectOptions(projects)[0];
+    const firstAccount = accounts.find((account) => account.currency === emptyForm.originalCurrency);
     clearPendingProofState();
     setForm({
       ...emptyForm,
       projectId: firstProject?.id ?? "",
       project: firstProject?.name ?? "General Operations",
+      fundingAccountId: firstAccount?.id ?? "",
     });
     setEditingId(null);
   }
@@ -402,8 +411,14 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const selectedProject = projects.find((project) => project.id === form.projectId);
+    const selectedAccount = accounts.find((account) => account.id === form.fundingAccountId && account.currency === form.originalCurrency);
     if (!selectedProject) {
       setNotice({ tone: "error", message: "Select a project before saving an expense." });
+      return;
+    }
+
+    if (!selectedAccount) {
+      setNotice({ tone: "error", message: "Select a matching funding account before saving an expense." });
       return;
     }
 
@@ -424,6 +439,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
       id: editingId ?? createId(),
       ...form,
       project: selectedProject.name,
+      fundingAccountId: selectedAccount.id,
       originalAmount: Number(form.originalAmount),
       exchangeRate: Number(form.exchangeRate),
     };
@@ -642,6 +658,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
   }
 
   const availableProjects = activeProjectOptions(projects);
+  const availableFundingAccounts = accounts.filter((account) => account.currency === form.originalCurrency);
   const projectNames = Array.from(new Set(expenses.map((expense) => projectLabel(projects, expense)))).sort();
   const totalAttachedProofs = expenses.filter((expense) => expenseHasProof(expense)).length;
   const visibleAttachments = form.attachments.map((attachment) => {
@@ -945,15 +962,18 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
             </select>
           </Field>
           <Field label="Funding account">
-            <select className={inputClass} onChange={(event) => updateForm("fundingAccountId", event.target.value)} value={form.fundingAccountId}>
-              {accounts
-                .filter((account) => account.currency === form.originalCurrency)
-                .map((account) => (
+            <select className={inputClass} disabled={!availableFundingAccounts.length} onChange={(event) => updateForm("fundingAccountId", event.target.value)} value={form.fundingAccountId}>
+              {availableFundingAccounts.length ? (
+                availableFundingAccounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.name}
                   </option>
-                ))}
+                ))
+              ) : (
+                <option value="">Create a matching account first</option>
+              )}
             </select>
+            {!availableFundingAccounts.length ? <span className="mt-1 block text-xs text-slate-500">Finance accounts are managed from the Finance page.</span> : null}
           </Field>
           <Field label="Paid by">
             <input className={inputClass} onChange={(event) => updateForm("paidBy", event.target.value)} placeholder="Team member" value={form.paidBy} />
@@ -1054,8 +1074,8 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
             />
           </Field>
           <div className="flex flex-col gap-3 sm:flex-row lg:col-span-4">
-            <button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none" disabled={!availableProjects.length}>
-              {!availableProjects.length ? "Create project first" : editingId ? "Save changes" : "Add expense"}
+            <button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none" disabled={!availableProjects.length || !availableFundingAccounts.length}>
+              {!availableProjects.length ? "Create project first" : !availableFundingAccounts.length ? `Create ${form.originalCurrency} account first` : editingId ? "Save changes" : "Add expense"}
             </button>
             {editingId ? (
               <button className="h-10 rounded-md border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" onClick={resetForm} type="button">

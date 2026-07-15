@@ -100,11 +100,12 @@ export function LocalDonationsManager() {
     setProjects(workspace.projects);
     const defaultDonor = workspace.donors[0];
     const defaultProject = activeProjectOptions(workspace.projects)[0];
+    const defaultAccount = workspace.financeAccounts.find((account) => account.currency === emptyForm.originalCurrency);
     setForm((current) => ({
       ...current,
       donorId: defaultDonor?.id ?? current.donorId,
       projectId: defaultProject?.id ?? current.projectId,
-      accountId: workspace.financeAccounts.find((account) => account.currency === current.originalCurrency)?.id ?? current.accountId,
+      accountId: defaultAccount?.id ?? "",
     }));
   }, []);
 
@@ -182,18 +183,19 @@ export function LocalDonationsManager() {
     setForm((current) => ({
       ...current,
       originalCurrency: currency,
-      accountId: accounts.find((account) => account.currency === currency)?.id ?? current.accountId,
+      accountId: accounts.find((account) => account.currency === currency)?.id ?? "",
     }));
   }
 
   function resetForm() {
     const firstDonor = donors[0];
     const firstProject = activeProjectOptions(projects)[0];
+    const firstAccount = accounts.find((account) => account.currency === emptyForm.originalCurrency);
     setForm({
       ...emptyForm,
       donorId: firstDonor?.id ?? "",
       projectId: firstProject?.id ?? "",
-      accountId: accounts.find((account) => account.currency === emptyForm.originalCurrency)?.id ?? emptyForm.accountId,
+      accountId: firstAccount?.id ?? "",
     });
     setEditingId(null);
   }
@@ -204,8 +206,9 @@ export function LocalDonationsManager() {
     const donorId = selectedDonor?.id ?? form.donorId;
     const donorName = selectedDonor?.fullName ?? form.legacyDonorName.trim();
     const selectedProject = projects.find((project) => project.id === form.projectId);
-    if (!donorId || !donorName || !selectedProject) {
-      setNotice({ tone: "error", message: "Select a donor and project before saving a donation." });
+    const selectedAccount = accounts.find((account) => account.id === form.accountId && account.currency === form.originalCurrency);
+    if (!donorId || !donorName || !selectedProject || !selectedAccount) {
+      setNotice({ tone: "error", message: "Select a donor, project, and matching funding account before saving a donation." });
       return;
     }
 
@@ -227,7 +230,7 @@ export function LocalDonationsManager() {
       donorName,
       projectId: selectedProject.id,
       project: selectedProject.name,
-      accountId: form.accountId,
+      accountId: selectedAccount.id,
       method: form.method,
       date: form.date,
       status: form.status,
@@ -311,14 +314,19 @@ export function LocalDonationsManager() {
 
   const availableProjects = activeProjectOptions(projects);
   const availableDonors = [...donors].sort((left, right) => left.fullName.localeCompare(right.fullName));
+  const availableAccounts = accounts.filter((account) => account.currency === form.originalCurrency);
   const projectNames = Array.from(new Set(donations.map((donation) => projectLabel(projects, donation)))).sort();
   const selectedDonorMissing = Boolean(form.donorId) && !availableDonors.some((donor) => donor.id === form.donorId);
-  const submitLabel = !availableDonors.length && !availableProjects.length
-    ? "Create donor and project first"
+  const submitLabel = !availableDonors.length && !availableProjects.length && !availableAccounts.length
+    ? "Create donor, project, and account first"
+    : !availableDonors.length && !availableProjects.length
+      ? "Create donor and project first"
     : !availableDonors.length
       ? "Create donor first"
       : !availableProjects.length
         ? "Create project first"
+        : !availableAccounts.length
+          ? `Create ${form.originalCurrency} account first`
         : editingId
           ? "Save changes"
           : "Record donation";
@@ -394,15 +402,18 @@ export function LocalDonationsManager() {
             {!availableProjects.length ? <span className="mt-1 block text-xs text-slate-500">Projects are managed from the Projects page.</span> : null}
           </Field>
           <Field label="Funding account">
-            <select className={inputClass} onChange={(event) => updateForm("accountId", event.target.value)} value={form.accountId}>
-              {accounts
-                .filter((account) => account.currency === form.originalCurrency)
-                .map((account) => (
+            <select className={inputClass} disabled={!availableAccounts.length} onChange={(event) => updateForm("accountId", event.target.value)} value={form.accountId}>
+              {availableAccounts.length ? (
+                availableAccounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.name}
                   </option>
-                ))}
+                ))
+              ) : (
+                <option value="">Create a matching account first</option>
+              )}
             </select>
+            {!availableAccounts.length ? <span className="mt-1 block text-xs text-slate-500">Finance accounts are managed from the Finance page.</span> : null}
           </Field>
           <Field label="Method">
             <select className={inputClass} onChange={(event) => updateForm("method", event.target.value)} value={form.method}>
@@ -429,7 +440,7 @@ export function LocalDonationsManager() {
             <input className={inputClass} onChange={(event) => updateForm("notes", event.target.value)} placeholder="Allocation or stewardship notes" value={form.notes} />
           </Field>
           <div className="flex flex-col gap-3 sm:flex-row lg:col-span-4">
-            <button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none" disabled={!availableDonors.length || !availableProjects.length}>
+            <button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none" disabled={!availableDonors.length || !availableProjects.length || !availableAccounts.length}>
               {submitLabel}
             </button>
             {editingId ? (
