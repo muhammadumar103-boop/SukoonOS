@@ -1,6 +1,6 @@
 import { defaultUsdToPkrRate } from "@/lib/finance/local-finance";
 import { sampleLocalProjects } from "@/lib/local-data/projects";
-import type { LocalDonation, LocalDonor, LocalTransfer } from "@/lib/local-data/schema";
+import type { LocalApproval, LocalDonation, LocalDonor, LocalTask, LocalTransfer } from "@/lib/local-data/schema";
 
 function moneyValues(originalAmount: number, originalCurrency: "PKR" | "USD", exchangeRate: number) {
   if (originalCurrency === "PKR") {
@@ -192,6 +192,41 @@ export const sampleLocalDonors: LocalDonor[] = [
     updateHistory: [{ id: "update-4", date: "2026-07-10", summary: "Introductory stewardship call logged." }],
     nextUpdateDueDate: "2026-07-16",
     reminderStatus: "Upcoming",
+  },
+];
+
+export const sampleLocalTasks: LocalTask[] = [
+  {
+    id: "task-1",
+    title: "Prepare July hospital donor update",
+    dueDate: "2026-07-16",
+    priority: "High",
+    assignedUser: "Ayesha Khan",
+    projectId: "project-hospital",
+    status: "Open",
+  },
+  {
+    id: "task-2",
+    title: "Review orphan sponsorship budget variance",
+    dueDate: "2026-07-18",
+    priority: "Medium",
+    assignedUser: "Bilal Ahmed",
+    projectId: "project-orphan-sponsorship",
+    status: "In Progress",
+  },
+];
+
+export const sampleLocalApprovals: LocalApproval[] = [
+  {
+    id: "approval-1",
+    sourceType: "Project Update",
+    sourceId: "project-food-parcels",
+    status: "Pending",
+    requestedBy: "Mariam Khan",
+    requestedAt: "2026-07-14",
+    reviewedBy: "",
+    reviewedAt: "",
+    notes: "Approve the Food Parcels donor update before the weekly stewardship email goes out.",
   },
 ];
 

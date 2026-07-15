@@ -1,10 +1,25 @@
-import { BarChart3 } from "lucide-react";
-import { DeferredAction } from "@/components/data-display/deferred-action";
+import { LocalReportsManager } from "@/app/(app)/reports/local-reports-manager";
+import { LocalWorkspaceBanner } from "@/components/data-display/local-workspace-banner";
 import { PageHeader } from "@/components/data-display/page-header";
-import { StatusBadge } from "@/components/data-display/status-badge";
+import { isDemoMode } from "@/config/runtime";
 import { getReports } from "@/server/queries/reports";
+import { BarChart3 } from "lucide-react";
+import { StatusBadge } from "@/components/data-display/status-badge";
 
 export default async function ReportsPage() {
+  if (isDemoMode) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Reports"
+          description="Filter live local finance, donor, project, approval, and account data with exportable CSV and PDF-ready payloads."
+        />
+        <LocalWorkspaceBanner />
+        <LocalReportsManager />
+      </div>
+    );
+  }
+
   const reports = await getReports();
 
   return (
@@ -12,7 +27,6 @@ export default async function ReportsPage() {
       <PageHeader
         title="Reports"
         description="Prepare finance summaries, impact reports, donor insights, and operational registers from live SukoonOS data."
-        action={<DeferredAction label="Coming in Milestone 5" />}
       />
       <section className="grid gap-4 lg:grid-cols-2">
         {reports.map((report) => (

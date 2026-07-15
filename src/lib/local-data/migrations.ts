@@ -18,14 +18,16 @@ import {
 import { resolveDonorReference } from "@/lib/local-data/donors";
 import {
   localWorkspaceSchemaVersion,
+  type LocalApproval,
   type LegacyLocalWorkspaceInput,
   type LocalDonation,
   type LocalDonor,
   type LocalProject,
+  type LocalTask,
   type LocalTransfer,
   type LocalWorkspace,
 } from "@/lib/local-data/schema";
-import { sampleLocalDonations, sampleLocalDonors, sampleLocalTransfers } from "@/lib/local-data/seeds";
+import { sampleLocalApprovals, sampleLocalDonations, sampleLocalDonors, sampleLocalTasks, sampleLocalTransfers } from "@/lib/local-data/seeds";
 
 type LegacyCollections = {
   expenses?: unknown[];
@@ -130,6 +132,48 @@ function normalizeDonors(donors: unknown[] | undefined): LocalDonor[] {
   return Array.isArray(donors) ? (donors as LocalDonor[]) : [];
 }
 
+function normalizeTasks(tasks: unknown[] | undefined): LocalTask[] {
+  return Array.isArray(tasks)
+    ? tasks.map((task, index) => {
+        const candidate = task as Partial<LocalTask>;
+        return {
+          id: candidate.id ?? `task-${Date.now()}-${index + 1}`,
+          title: candidate.title?.trim() || "Untitled task",
+          dueDate: candidate.dueDate ?? "",
+          priority: candidate.priority === "Low" || candidate.priority === "Medium" || candidate.priority === "High" ? candidate.priority : "Medium",
+          assignedUser: candidate.assignedUser?.trim() || "Unassigned",
+          projectId: candidate.projectId ?? "",
+          status:
+            candidate.status === "Open" || candidate.status === "In Progress" || candidate.status === "Blocked" || candidate.status === "Done"
+              ? candidate.status
+              : "Open",
+        };
+      })
+    : [];
+}
+
+function normalizeApprovals(approvals: unknown[] | undefined): LocalApproval[] {
+  return Array.isArray(approvals)
+    ? approvals.map((approval, index) => {
+        const candidate = approval as Partial<LocalApproval>;
+        return {
+          id: candidate.id ?? `approval-${Date.now()}-${index + 1}`,
+          sourceType:
+            candidate.sourceType === "Expense" || candidate.sourceType === "Transfer" || candidate.sourceType === "Project Update"
+              ? candidate.sourceType
+              : "Project Update",
+          sourceId: candidate.sourceId?.trim() || "",
+          status: candidate.status === "Pending" || candidate.status === "Approved" || candidate.status === "Rejected" ? candidate.status : "Pending",
+          requestedBy: candidate.requestedBy?.trim() || "Local Demo User",
+          requestedAt: candidate.requestedAt ?? new Date().toISOString().slice(0, 10),
+          reviewedBy: candidate.reviewedBy?.trim() || "",
+          reviewedAt: candidate.reviewedAt ?? "",
+          notes: candidate.notes?.trim() || "",
+        };
+      })
+    : [];
+}
+
 function collectLegacyProjectNames(
   candidate: LegacyLocalWorkspaceInput,
   legacy: LegacyCollections,
@@ -200,6 +244,8 @@ export function createSampleWorkspace(legacy: LegacyCollections = {}): LocalWork
     transfers: normalizeTransfers(sampleLocalTransfers, projects),
     projects,
     donors,
+    tasks: normalizeTasks(sampleLocalTasks),
+    approvals: normalizeApprovals(sampleLocalApprovals),
   };
 }
 
@@ -227,8 +273,8 @@ export function migrateLocalWorkspace(input: unknown, legacy: LegacyCollections 
     transfers: normalizeTransfers(existingTransfers, projects),
     projects,
     donors,
-    tasks: Array.isArray(candidate.tasks) ? candidate.tasks : [],
-    approvals: Array.isArray(candidate.approvals) ? candidate.approvals : [],
+    tasks: normalizeTasks(candidate.tasks?.length ? candidate.tasks : sampleDataEnabled ? sampleLocalTasks : []),
+    approvals: normalizeApprovals(candidate.approvals?.length ? candidate.approvals : sampleDataEnabled ? sampleLocalApprovals : []),
     reports: Array.isArray(candidate.reports) ? candidate.reports : [],
     auditLog: Array.isArray(candidate.auditLog) ? candidate.auditLog : [],
     settings: candidate.settings && typeof candidate.settings === "object" ? candidate.settings : {},

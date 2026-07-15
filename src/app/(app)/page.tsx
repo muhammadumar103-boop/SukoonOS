@@ -2,9 +2,12 @@ import { ArrowDownLeft, ArrowRightLeft, BadgeDollarSign, CheckCircle2, CreditCar
 import Link from "next/link";
 import { BarChart } from "@/components/charts/bar-chart";
 import { DonutChart } from "@/components/charts/donut-chart";
+import { LocalDashboard } from "@/app/(app)/local-dashboard";
+import { LocalWorkspaceBanner } from "@/components/data-display/local-workspace-banner";
 import { MetricCard } from "@/components/data-display/metric-card";
 import { PageHeader } from "@/components/data-display/page-header";
 import { StatusBadge } from "@/components/data-display/status-badge";
+import { isDemoMode } from "@/config/runtime";
 import { getDashboardData } from "@/server/queries/dashboard";
 
 const metricIcons = {
@@ -27,6 +30,24 @@ const activityIcons = {
 };
 
 export default async function DashboardPage() {
+  if (isDemoMode) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Dashboard"
+          description="Live local operations view for balances, giving, spending, approvals, reminders, and task follow-up."
+          action={
+            <Link className="inline-flex h-10 items-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800" href="/donations">
+              New donation
+            </Link>
+          }
+        />
+        <LocalWorkspaceBanner />
+        <LocalDashboard />
+      </div>
+    );
+  }
+
   const { stats, donationTrend, expenseBreakdown, fundsDeployedPercent, recentActivity, todaysTasks } = await getDashboardData();
 
   return (

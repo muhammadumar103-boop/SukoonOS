@@ -136,7 +136,7 @@ Verification:
 
 ### Milestone 5: Tasks, Approvals, Dashboard, Reports
 
-Status: In progress
+Status: Complete
 
 Scope:
 
@@ -150,6 +150,16 @@ Acceptance criteria:
 - Dashboard values derive from stored data.
 - Pending approvals and upcoming tasks derive from tasks/approval records.
 - Reports cover the requested MVP report types and export CSV.
+
+Verification:
+
+- Demo-mode dashboard now derives balances, donations, expenses, active projects, reminders, approvals, charts, and recent activity from the local workspace instead of `src/data/demo-data.ts`.
+- Task queue supports local task creation, completion, deletion, and donor reminder completion.
+- Approval queue supports expense, transfer, and project update review flows with local persistence and audit logging.
+- Reports now support live filters, CSV export, and PDF-ready JSON payload export on `/reports`.
+- `npm run build` passed on 2026-07-15.
+- `npm run typecheck` passed on 2026-07-15 after the production build refreshed `.next/types`.
+- Route smoke checks returned `200 OK` for `/`, `/reports`, `/donations`, `/donors`, `/projects`, and `/finance`, and live interaction checks passed for dashboard task creation and donor selection.
 
 ### Milestone 6: End-To-End Validation
 

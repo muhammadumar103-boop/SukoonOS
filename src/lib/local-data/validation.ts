@@ -1,9 +1,11 @@
 import { z } from "zod";
 import {
+  type LocalApproval,
   localWorkspaceSchemaVersion,
   type LocalDonor,
   type LocalDonation,
   type LocalProject,
+  type LocalTask,
   type LocalTransfer,
   type LocalWorkspace,
 } from "@/lib/local-data/schema";
@@ -116,6 +118,28 @@ export const localProjectSchema = z.object({
   archivedAt: z.string(),
 }) as z.ZodType<LocalProject>;
 
+export const localTaskSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  dueDate: z.string(),
+  priority: z.enum(["Low", "Medium", "High"]),
+  assignedUser: z.string().min(1),
+  projectId: z.string(),
+  status: z.enum(["Open", "In Progress", "Blocked", "Done"]),
+}) as z.ZodType<LocalTask>;
+
+export const localApprovalSchema = z.object({
+  id: z.string().min(1),
+  sourceType: z.enum(["Expense", "Transfer", "Project Update"]),
+  sourceId: z.string(),
+  status: z.enum(["Pending", "Approved", "Rejected"]),
+  requestedBy: z.string().min(1),
+  requestedAt: z.string().min(1),
+  reviewedBy: z.string(),
+  reviewedAt: z.string(),
+  notes: z.string(),
+}) as z.ZodType<LocalApproval>;
+
 export const localWorkspaceSchema = z.object({
   schemaVersion: z.literal(localWorkspaceSchemaVersion),
   sampleDataEnabled: z.boolean(),
@@ -169,8 +193,8 @@ export const localWorkspaceSchema = z.object({
   transfers: z.array(localTransferSchema),
   projects: z.array(localProjectSchema),
   donors: z.array(localDonorSchema),
-  tasks: z.array(z.any()),
-  approvals: z.array(z.any()),
+  tasks: z.array(localTaskSchema),
+  approvals: z.array(localApprovalSchema),
   reports: z.array(z.any()),
   auditLog: z.array(
     z.object({
