@@ -15,6 +15,7 @@ import {
   resolveProjectReference,
   sampleLocalProjects,
 } from "@/lib/local-data/projects";
+import { resolveDonorReference } from "@/lib/local-data/donors";
 import {
   localWorkspaceSchemaVersion,
   type LegacyLocalWorkspaceInput,
@@ -78,16 +79,17 @@ function normalizeBudgets(budgets: unknown[] | undefined, projects: LocalProject
   });
 }
 
-function normalizeDonations(donations: unknown[] | undefined, projects: LocalProject[]): LocalDonation[] {
+function normalizeDonations(donations: unknown[] | undefined, projects: LocalProject[], donors: LocalDonor[]): LocalDonation[] {
   return Array.isArray(donations)
     ? donations.map((donation) => {
         const candidate = donation as Partial<LocalDonation>;
         const projectReference = resolveProjectReference(projects, candidate);
+        const donorReference = resolveDonorReference(donors, candidate);
 
         return {
           id: candidate.id ?? `donation-${Date.now()}`,
-          donorId: candidate.donorId ?? "donor-unassigned",
-          donorName: candidate.donorName ?? "Unknown donor",
+          donorId: donorReference.donorId,
+          donorName: donorReference.donorName,
           projectId: projectReference.projectId,
           project: projectReference.project,
           accountId: candidate.accountId ?? "main-donations-bank",
@@ -175,6 +177,7 @@ export function createEmptyWorkspace(): LocalWorkspace {
 
 export function createSampleWorkspace(legacy: LegacyCollections = {}): LocalWorkspace {
   const workspace = createEmptyWorkspace();
+  const donors = normalizeDonors(sampleLocalDonors);
   const projects = normalizeProjects(
     sampleLocalProjects,
     linkedProjectNamesFromWorkspace({
@@ -193,10 +196,10 @@ export function createSampleWorkspace(legacy: LegacyCollections = {}): LocalWork
     financeAccounts: normalizeAccounts(legacy.financeAccounts),
     financeBudgets: normalizeBudgets(legacy.financeBudgets, projects),
     expenses: normalizeExpenses(legacy.expenses, projects),
-    donations: normalizeDonations(sampleLocalDonations, projects),
+    donations: normalizeDonations(sampleLocalDonations, projects, donors),
     transfers: normalizeTransfers(sampleLocalTransfers, projects),
     projects,
-    donors: sampleLocalDonors,
+    donors,
   };
 }
 
@@ -209,6 +212,7 @@ export function migrateLocalWorkspace(input: unknown, legacy: LegacyCollections 
   const sampleDataEnabled = Boolean(candidate.sampleDataEnabled);
   const existingDonations = candidate.donations?.length ? candidate.donations : sampleDataEnabled ? sampleLocalDonations : [];
   const existingTransfers = candidate.transfers?.length ? candidate.transfers : sampleDataEnabled ? sampleLocalTransfers : [];
+  const donors = normalizeDonors(candidate.donors?.length ? candidate.donors : sampleDataEnabled ? sampleLocalDonors : []);
   const projects = normalizeProjects(candidate.projects, collectLegacyProjectNames(candidate, legacy, sampleDataEnabled), sampleDataEnabled);
 
   return {
@@ -219,10 +223,10 @@ export function migrateLocalWorkspace(input: unknown, legacy: LegacyCollections 
     financeAccounts: normalizeAccounts(existingAccounts),
     financeBudgets: normalizeBudgets(existingBudgets, projects),
     expenses: normalizeExpenses(existingExpenses, projects),
-    donations: normalizeDonations(existingDonations, projects),
+    donations: normalizeDonations(existingDonations, projects, donors),
     transfers: normalizeTransfers(existingTransfers, projects),
     projects,
-    donors: normalizeDonors(candidate.donors?.length ? candidate.donors : sampleDataEnabled ? sampleLocalDonors : []),
+    donors,
     tasks: Array.isArray(candidate.tasks) ? candidate.tasks : [],
     approvals: Array.isArray(candidate.approvals) ? candidate.approvals : [],
     reports: Array.isArray(candidate.reports) ? candidate.reports : [],

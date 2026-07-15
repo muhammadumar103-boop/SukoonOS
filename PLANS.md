@@ -85,7 +85,7 @@ Verification:
 
 ### Milestone 3: Projects And Budgets
 
-Status: In progress
+Status: Complete
 
 Checkpoint:
 
@@ -103,9 +103,16 @@ Acceptance criteria:
 - Project pages show connected donations, expenses, transfers, budgets, and ledger rows.
 - Project records persist after refresh in demo mode.
 
+Verification:
+
+- Stable local project CRUD is live on `/projects`.
+- Expenses, donations, transfers, and finance budgets now use `projectId` links with legacy project-name fallback preserved by migration.
+- `npm run build` passed on 2026-07-15.
+- `npm run typecheck` passed on 2026-07-15 after the production build refreshed `.next/types`.
+
 ### Milestone 4: Donor CRM
 
-Status: Not started
+Status: Complete
 
 Scope:
 
@@ -119,9 +126,17 @@ Acceptance criteria:
 - Donor update reminders can be searched and filtered.
 - Donor records persist after refresh in demo mode.
 
+Verification:
+
+- Demo-mode donor CRUD is live on `/donors` with contact details, preferences, zakat, recurring status, tax receipt status, notes, reminder filters, and browser persistence.
+- Lifetime giving, last donation date, and projects supported are derived from workspace donations.
+- Donations now use donor selection from immutable local donor records while preserving legacy donor-name fallback during migration.
+- `npm run build` passed on 2026-07-15.
+- `npm run typecheck` passed on 2026-07-15 after the production build refreshed `.next/types`.
+
 ### Milestone 5: Tasks, Approvals, Dashboard, Reports
 
-Status: Not started
+Status: In progress
 
 Scope:
 

@@ -305,7 +305,7 @@ export function LocalDonorsManager() {
                   <h2 className="text-lg font-semibold text-slate-950">{donor.fullName}</h2>
                   <p className="mt-1 text-sm text-slate-500">{donor.donorType} · {donor.country}</p>
                 </div>
-                <StatusBadge value={donor.reminderStatus === "Overdue" ? "At Risk" : donor.reminderStatus === "Upcoming" ? "Review" : donor.recurringDonor ? "Strong" : "New"} />
+                <StatusBadge value={donor.effectiveReminderStatus === "Overdue" ? "At Risk" : donor.effectiveReminderStatus === "Upcoming" ? "Review" : donor.recurringDonor ? "Strong" : "New"} />
               </div>
 
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -317,9 +317,14 @@ export function LocalDonorsManager() {
 
               <div className="mt-5 space-y-2 text-sm text-slate-600">
                 <p><span className="font-medium text-slate-900">Preferred contact:</span> {donor.preferredContactMethod}</p>
+                <p><span className="font-medium text-slate-900">Giving preferences:</span> {donor.givingPreferences.length ? donor.givingPreferences.join(", ") : "Not set"}</p>
                 <p><span className="font-medium text-slate-900">Projects supported:</span> {donor.projectsSupported.length ? donor.projectsSupported.join(", ") : "None yet"}</p>
+                <p><span className="font-medium text-slate-900">Zakat:</span> {donor.zakatPreference || "Not set"}</p>
+                <p><span className="font-medium text-slate-900">Recurring:</span> {donor.recurringDonor ? "Yes" : "No"}</p>
                 <p><span className="font-medium text-slate-900">Tax receipt:</span> {donor.taxReceiptStatus}</p>
                 <p><span className="font-medium text-slate-900">Next update due:</span> {donor.nextUpdateDueDate || "Not set"}</p>
+                <p><span className="font-medium text-slate-900">Reminder state:</span> {donor.effectiveReminderStatus}</p>
+                <p><span className="font-medium text-slate-900">Notes:</span> {donor.notes || "No notes recorded."}</p>
               </div>
 
               <div className="mt-5 flex justify-end gap-2">

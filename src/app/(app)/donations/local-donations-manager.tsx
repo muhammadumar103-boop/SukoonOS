@@ -4,10 +4,11 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Download, Pencil, Search, Trash2 } from "lucide-react";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { defaultUsdToPkrRate, formatMoney, type Currency, type FinanceAccount } from "@/lib/finance/local-finance";
+import { donorLabel } from "@/lib/local-data/donors";
 import { activeProjectOptions, projectLabel } from "@/lib/local-data/projects";
 import { moneyValues } from "@/lib/local-data/migrations";
 import { loadLocalWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
-import type { LocalDonation, LocalProject, LocalWorkspace } from "@/lib/local-data/schema";
+import type { LocalDonation, LocalDonor, LocalProject, LocalWorkspace } from "@/lib/local-data/schema";
 import { cn } from "@/lib/utils";
 
 type DonationStatus = LocalDonation["status"];
@@ -16,7 +17,8 @@ const donationStatuses: DonationStatus[] = ["Pledged", "Processing", "Received",
 const donationMethods = ["Bank Transfer", "Card", "Cheque", "Cash", "Mobile Wallet"];
 
 type DonationForm = {
-  donorName: string;
+  donorId: string;
+  legacyDonorName: string;
   projectId: string;
   accountId: string;
   method: string;
@@ -30,7 +32,8 @@ type DonationForm = {
 };
 
 const emptyForm: DonationForm = {
-  donorName: "",
+  donorId: "",
+  legacyDonorName: "",
   projectId: "",
   accountId: "main-donations-bank",
   method: donationMethods[0],
@@ -58,7 +61,8 @@ function escapeCsv(value: string | number) {
 
 function donationToForm(donation: LocalDonation): DonationForm {
   return {
-    donorName: donation.donorName,
+    donorId: donation.donorId,
+    legacyDonorName: donation.donorName,
     projectId: donation.projectId,
     accountId: donation.accountId,
     method: donation.method,
@@ -76,6 +80,7 @@ export function LocalDonationsManager() {
   const workspaceRef = useRef<LocalWorkspace | null>(null);
   const [donations, setDonations] = useState<LocalDonation[]>([]);
   const [accounts, setAccounts] = useState<FinanceAccount[]>([]);
+  const [donors, setDonors] = useState<LocalDonor[]>([]);
   const [projects, setProjects] = useState<LocalProject[]>([]);
   const [form, setForm] = useState<DonationForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -89,10 +94,13 @@ export function LocalDonationsManager() {
     workspaceRef.current = workspace;
     setDonations(workspace.donations);
     setAccounts(workspace.financeAccounts);
+    setDonors(workspace.donors);
     setProjects(workspace.projects);
+    const defaultDonor = workspace.donors[0];
     const defaultProject = activeProjectOptions(workspace.projects)[0];
     setForm((current) => ({
       ...current,
+      donorId: defaultDonor?.id ?? current.donorId,
       projectId: defaultProject?.id ?? current.projectId,
       accountId: workspace.financeAccounts.find((account) => account.currency === current.originalCurrency)?.id ?? current.accountId,
     }));
@@ -111,9 +119,10 @@ export function LocalDonationsManager() {
     const query = search.trim().toLowerCase();
 
     return donations.filter((donation) => {
+      const displayDonor = donorLabel(donors, donation);
       const displayProject = projectLabel(projects, donation);
       const searchable = [
-        donation.donorName,
+        displayDonor,
         displayProject,
         donation.method,
         donation.date,
@@ -131,7 +140,7 @@ export function LocalDonationsManager() {
         (projectFilter === "All" || displayProject === projectFilter)
       );
     });
-  }, [donations, projectFilter, projects, search, statusFilter]);
+  }, [donations, donors, projectFilter, projects, search, statusFilter]);
 
   const totals = useMemo(() => {
     return filteredDonations.reduce(
@@ -159,9 +168,11 @@ export function LocalDonationsManager() {
   }
 
   function resetForm() {
+    const firstDonor = donors[0];
     const firstProject = activeProjectOptions(projects)[0];
     setForm({
       ...emptyForm,
+      donorId: firstDonor?.id ?? "",
       projectId: firstProject?.id ?? "",
       accountId: accounts.find((account) => account.currency === emptyForm.originalCurrency)?.id ?? emptyForm.accountId,
     });
@@ -170,15 +181,17 @@ export function LocalDonationsManager() {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const donorName = form.donorName.trim();
+    const selectedDonor = donors.find((donor) => donor.id === form.donorId);
+    const donorId = selectedDonor?.id ?? form.donorId;
+    const donorName = selectedDonor?.fullName ?? form.legacyDonorName.trim();
     const selectedProject = projects.find((project) => project.id === form.projectId);
-    if (!donorName || !selectedProject) {
+    if (!donorId || !donorName || !selectedProject) {
       return;
     }
 
     const nextDonation: LocalDonation = {
       id: editingId ?? createId(),
-      donorId: donorName.toLowerCase().replace(/[^a-z0-9]+/g, "-") || `donor-${Date.now()}`,
+      donorId,
       donorName,
       projectId: selectedProject.id,
       project: selectedProject.name,
@@ -199,7 +212,7 @@ export function LocalDonationsManager() {
     const headers = ["Date", "Donor", "Original Amount", "Original Currency", "Exchange Rate", "PKR Value", "USD Value", "Project", "Method", "Account", "Receipt", "Status", "Notes"];
     const rows = filteredDonations.map((donation) => [
       donation.date,
-      donation.donorName,
+      donorLabel(donors, donation),
       donation.originalAmount,
       donation.originalCurrency,
       donation.exchangeRate,
@@ -224,7 +237,18 @@ export function LocalDonationsManager() {
   }
 
   const availableProjects = activeProjectOptions(projects);
+  const availableDonors = [...donors].sort((left, right) => left.fullName.localeCompare(right.fullName));
   const projectNames = Array.from(new Set(donations.map((donation) => projectLabel(projects, donation)))).sort();
+  const selectedDonorMissing = Boolean(form.donorId) && !availableDonors.some((donor) => donor.id === form.donorId);
+  const submitLabel = !availableDonors.length && !availableProjects.length
+    ? "Create donor and project first"
+    : !availableDonors.length
+      ? "Create donor first"
+      : !availableProjects.length
+        ? "Create project first"
+        : editingId
+          ? "Save changes"
+          : "Record donation";
 
   return (
     <div className="space-y-6">
@@ -243,7 +267,26 @@ export function LocalDonationsManager() {
             <input className={inputClass} onChange={(event) => updateForm("date", event.target.value)} required type="date" value={form.date} />
           </Field>
           <Field label="Donor">
-            <input className={inputClass} onChange={(event) => updateForm("donorName", event.target.value)} placeholder="Donor name" required value={form.donorName} />
+            <select
+              className={inputClass}
+              disabled={!availableDonors.length}
+              onChange={(event) => updateForm("donorId", event.target.value)}
+              value={form.donorId}
+            >
+              {selectedDonorMissing ? (
+                <option value={form.donorId}>{form.legacyDonorName || "Legacy donor link"}</option>
+              ) : null}
+              {availableDonors.length ? (
+                availableDonors.map((donor) => (
+                  <option key={donor.id} value={donor.id}>
+                    {donor.fullName}
+                  </option>
+                ))
+              ) : (
+                <option value="">Create a donor first</option>
+              )}
+            </select>
+            {!availableDonors.length ? <span className="mt-1 block text-xs text-slate-500">Donors are managed from the Donors CRM page.</span> : null}
           </Field>
           <Field label="Original amount">
             <input className={inputClass} min="0" onChange={(event) => updateForm("originalAmount", Number(event.target.value))} required step="0.01" type="number" value={form.originalAmount} />
@@ -312,8 +355,8 @@ export function LocalDonationsManager() {
             <input className={inputClass} onChange={(event) => updateForm("notes", event.target.value)} placeholder="Allocation or stewardship notes" value={form.notes} />
           </Field>
           <div className="flex flex-col gap-3 sm:flex-row lg:col-span-4">
-            <button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none" disabled={!availableProjects.length}>
-              {!availableProjects.length ? "Create project first" : editingId ? "Save changes" : "Record donation"}
+            <button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none" disabled={!availableDonors.length || !availableProjects.length}>
+              {submitLabel}
             </button>
             {editingId ? (
               <button className="h-10 rounded-md border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" onClick={resetForm} type="button">
@@ -373,7 +416,7 @@ export function LocalDonationsManager() {
                 <tr key={donation.id} className="align-top">
                   <td className="px-5 py-4 text-slate-500">{donation.date}</td>
                   <td className="px-5 py-4">
-                    <p className="font-semibold text-slate-950">{donation.donorName}</p>
+                    <p className="font-semibold text-slate-950">{donorLabel(donors, donation)}</p>
                     <p className="mt-1 text-xs text-slate-500">{donation.method}</p>
                   </td>
                   <td className="px-5 py-4 text-slate-500">{projectLabel(projects, donation)}</td>
