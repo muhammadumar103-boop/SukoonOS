@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Download, Pencil, Search, Trash2 } from "lucide-react";
+import { Check, Download, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { FormNotice } from "@/components/data-display/form-notice";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { defaultUsdToPkrRate, formatMoney, type Currency, type FinanceAccount } from "@/lib/finance/local-finance";
@@ -34,6 +34,15 @@ type DonationForm = {
   notes: string;
 };
 
+type AllocationMode = "GeneralFund" | "Project";
+
+type InlineDonorForm = {
+  country: string;
+  fullName: string;
+  phone: string;
+  whatsapp: string;
+};
+
 const emptyForm: DonationForm = {
   donorId: "",
   legacyDonorName: "",
@@ -47,6 +56,13 @@ const emptyForm: DonationForm = {
   exchangeRate: defaultUsdToPkrRate,
   receiptReference: "",
   notes: "",
+};
+
+const emptyInlineDonorForm: InlineDonorForm = {
+  country: "Pakistan",
+  fullName: "",
+  phone: "",
+  whatsapp: "",
 };
 
 function createId() {
@@ -79,6 +95,10 @@ function donationToForm(donation: LocalDonation): DonationForm {
   };
 }
 
+function donationAllocationMode(donation: LocalDonation): AllocationMode {
+  return donation.projectId || donation.project !== "General Fund" ? "Project" : "GeneralFund";
+}
+
 export function LocalDonationsManager() {
   const workspaceRef = useRef<LocalWorkspace | null>(null);
   const [donations, setDonations] = useState<LocalDonation[]>([]);
@@ -90,6 +110,10 @@ export function LocalDonationsManager() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | DonationStatus>("All");
   const [projectFilter, setProjectFilter] = useState("All");
+  const [allocationMode, setAllocationMode] = useState<AllocationMode>("GeneralFund");
+  const [donorLookup, setDonorLookup] = useState("");
+  const [showInlineDonorForm, setShowInlineDonorForm] = useState(false);
+  const [inlineDonorForm, setInlineDonorForm] = useState<InlineDonorForm>(emptyInlineDonorForm);
   const [notice, setNotice] = useState<{ tone: "error" | "success"; message: string } | null>(null);
 
   useEffect(() => {
@@ -100,14 +124,13 @@ export function LocalDonationsManager() {
     setDonors(workspace.donors);
     setProjects(workspace.projects);
     const defaultDonor = workspace.donors[0];
-    const defaultProject = activeProjectOptions(workspace.projects)[0];
     const defaultAccount = workspace.financeAccounts.find((account) => account.currency === emptyForm.originalCurrency);
     setForm((current) => ({
       ...current,
       donorId: defaultDonor?.id ?? current.donorId,
-      projectId: defaultProject?.id ?? current.projectId,
       accountId: defaultAccount?.id ?? "",
     }));
+    setDonorLookup(defaultDonor?.fullName ?? "");
   }, []);
 
   const filteredDonations = useMemo(() => {
@@ -190,15 +213,103 @@ export function LocalDonationsManager() {
 
   function resetForm() {
     const firstDonor = donors[0];
-    const firstProject = activeProjectOptions(projects)[0];
     const firstAccount = accounts.find((account) => account.currency === emptyForm.originalCurrency);
     setForm({
       ...emptyForm,
       donorId: firstDonor?.id ?? "",
-      projectId: firstProject?.id ?? "",
       accountId: firstAccount?.id ?? "",
     });
     setEditingId(null);
+    setAllocationMode("GeneralFund");
+    setDonorLookup(firstDonor?.fullName ?? "");
+    setShowInlineDonorForm(false);
+    setInlineDonorForm(emptyInlineDonorForm);
+  }
+
+  function saveDonors(
+    nextDonors: LocalDonor[],
+    audit: { action: string; entityId: string; metadata: Record<string, unknown> },
+  ) {
+    if (!workspaceRef.current) {
+      return;
+    }
+
+    const savedWorkspace = saveAuditedWorkspace(
+      { ...workspaceRef.current, donors: nextDonors },
+      {
+        entityType: "donor",
+        actor: "Local Demo User",
+        entityId: audit.entityId,
+        action: audit.action,
+        metadata: audit.metadata,
+      },
+    );
+
+    workspaceRef.current = savedWorkspace;
+    setDonors(savedWorkspace.donors);
+  }
+
+  function createInlineDonor() {
+    const fullName = inlineDonorForm.fullName.trim();
+    const country = inlineDonorForm.country.trim();
+    if (!fullName) {
+      setNotice({ tone: "error", message: "Add the donor name before saving an inline donor." });
+      return;
+    }
+    if (!country) {
+      setNotice({ tone: "error", message: "Add the donor country before saving an inline donor." });
+      return;
+    }
+
+    const existingMatch = donors.find((donor) => donor.fullName.trim().toLowerCase() === fullName.toLowerCase());
+    if (existingMatch) {
+      updateForm("donorId", existingMatch.id);
+      updateForm("legacyDonorName", existingMatch.fullName);
+      setDonorLookup(existingMatch.fullName);
+      setShowInlineDonorForm(false);
+      setInlineDonorForm(emptyInlineDonorForm);
+      setNotice({ tone: "success", message: `${existingMatch.fullName} is already in the donor list and is now selected.` });
+      return;
+    }
+
+    const nextDonor: LocalDonor = {
+      id: createId().replace("donation-", "donor-"),
+      fullName,
+      phone: inlineDonorForm.phone.trim(),
+      whatsapp: inlineDonorForm.whatsapp.trim(),
+      email: "",
+      country,
+      preferredContactMethod: inlineDonorForm.whatsapp.trim() ? "WhatsApp" : inlineDonorForm.phone.trim() ? "Phone" : "Email",
+      donorType: "Individual",
+      givingPreferences: [],
+      zakatPreference: "",
+      recurringDonor: false,
+      notes: "Created inline from the Donations workflow.",
+      taxReceiptStatus: "Pending",
+      updateHistory: [],
+      nextUpdateDueDate: "",
+      reminderStatus: "None",
+    };
+
+    saveDonors([nextDonor, ...donors], {
+      action: "created",
+      entityId: nextDonor.id,
+      metadata: { source: "inline-donation-form" },
+    });
+    updateForm("donorId", nextDonor.id);
+    updateForm("legacyDonorName", nextDonor.fullName);
+    setDonorLookup(nextDonor.fullName);
+    setShowInlineDonorForm(false);
+    setInlineDonorForm(emptyInlineDonorForm);
+    setNotice({ tone: "success", message: `${nextDonor.fullName} was created and selected for this donation.` });
+  }
+
+  function selectDonor(donor: LocalDonor) {
+    updateForm("donorId", donor.id);
+    updateForm("legacyDonorName", donor.fullName);
+    setDonorLookup(donor.fullName);
+    setShowInlineDonorForm(false);
+    setInlineDonorForm(emptyInlineDonorForm);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -206,10 +317,15 @@ export function LocalDonationsManager() {
     const selectedDonor = donors.find((donor) => donor.id === form.donorId);
     const donorId = selectedDonor?.id ?? form.donorId;
     const donorName = selectedDonor?.fullName ?? form.legacyDonorName.trim();
-    const selectedProject = projects.find((project) => project.id === form.projectId);
     const selectedAccount = accounts.find((account) => account.id === form.accountId && account.currency === form.originalCurrency);
-    if (!donorId || !donorName || !selectedProject || !selectedAccount) {
-      setNotice({ tone: "error", message: "Select a donor, project, and matching funding account before saving a donation." });
+    const selectedProject = projects.find((project) => project.id === form.projectId);
+    if (!donorId || !donorName || !selectedAccount || (allocationMode === "Project" && !selectedProject)) {
+      setNotice({
+        tone: "error",
+        message: allocationMode === "Project"
+          ? "Select a donor, project, and matching funding account before saving a donation."
+          : "Select a donor and matching funding account before saving a donation.",
+      });
       return;
     }
 
@@ -229,8 +345,8 @@ export function LocalDonationsManager() {
       id: editingId ?? createId(),
       donorId,
       donorName,
-      projectId: selectedProject.id,
-      project: selectedProject.name,
+      projectId: allocationMode === "Project" ? selectedProject?.id ?? "" : "",
+      project: allocationMode === "Project" ? selectedProject?.name ?? "General Fund" : "General Fund",
       accountId: selectedAccount.id,
       method: form.method,
       date: form.date,
@@ -249,6 +365,7 @@ export function LocalDonationsManager() {
       metadata: {
         accountId: nextDonation.accountId,
         donorId: nextDonation.donorId,
+        allocationMode,
         projectId: nextDonation.projectId,
         status: nextDonation.status,
       },
@@ -318,19 +435,19 @@ export function LocalDonationsManager() {
   const availableAccounts = accounts.filter((account) => account.currency === form.originalCurrency);
   const projectNames = Array.from(new Set(donations.map((donation) => projectLabel(projects, donation)))).sort();
   const selectedDonorMissing = Boolean(form.donorId) && !availableDonors.some((donor) => donor.id === form.donorId);
-  const submitLabel = !availableDonors.length && !availableProjects.length && !availableAccounts.length
-    ? "Create donor, project, and account first"
-    : !availableDonors.length && !availableProjects.length
-      ? "Create donor and project first"
-    : !availableDonors.length
-      ? "Create donor first"
-      : !availableProjects.length
-        ? "Create project first"
-        : !availableAccounts.length
-          ? `Create ${form.originalCurrency} account first`
-        : editingId
-          ? "Save changes"
-          : "Record donation";
+  const selectedDonor = availableDonors.find((donor) => donor.id === form.donorId);
+  const donorMatches = donorLookup.trim()
+    ? availableDonors.filter((donor) =>
+        [donor.fullName, donor.email, donor.whatsapp, donor.phone, donor.country].join(" ").toLowerCase().includes(donorLookup.trim().toLowerCase()),
+      )
+    : availableDonors.slice(0, 6);
+  const submitLabel = !availableAccounts.length
+    ? `Create ${form.originalCurrency} account first`
+    : allocationMode === "Project" && !availableProjects.length
+      ? "Create a project first"
+      : editingId
+        ? "Save changes"
+        : "Record donation";
 
   return (
     <div className="space-y-6">
@@ -346,30 +463,204 @@ export function LocalDonationsManager() {
         {notice ? <div className="mt-4"><FormNotice message={notice.message} tone={notice.tone} /></div> : null}
 
         <form className="mt-5 grid gap-4 lg:grid-cols-4" onSubmit={handleSubmit}>
+          <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-4 lg:col-span-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-950">Donor</p>
+                <p className="mt-1 text-sm text-slate-500">Pick an existing donor quickly or add a new one here without leaving Donations.</p>
+              </div>
+              <button
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                onClick={() => setShowInlineDonorForm((current) => !current)}
+                type="button"
+              >
+                {showInlineDonorForm ? <X className="size-4" aria-hidden="true" /> : <Plus className="size-4" aria-hidden="true" />}
+                {showInlineDonorForm ? "Close inline donor" : "New donor inline"}
+              </button>
+            </div>
+
+            {selectedDonor && !showInlineDonorForm ? (
+              <div className="mt-4 flex flex-col gap-3 rounded-lg border border-emerald-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-950">{selectedDonor.fullName}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {[selectedDonor.country, selectedDonor.whatsapp || selectedDonor.phone || selectedDonor.email || "No contact added yet"]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                </div>
+                <button
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  onClick={() => {
+                    updateForm("donorId", "");
+                    updateForm("legacyDonorName", "");
+                    setDonorLookup("");
+                  }}
+                  type="button"
+                >
+                  Change donor
+                </button>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3">
+                <Field className="lg:col-span-4" label="Find donor">
+                  <div className="flex h-11 items-center gap-2 rounded-md border border-emerald-100 bg-white px-3">
+                    <Search className="size-4 text-slate-400" aria-hidden="true" />
+                    <input
+                      className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+                      onChange={(event) => setDonorLookup(event.target.value)}
+                      placeholder={availableDonors.length ? "Type donor name, phone, email, or country" : "No donors yet. Create one inline."}
+                      value={donorLookup}
+                    />
+                  </div>
+                </Field>
+                {selectedDonorMissing ? (
+                  <p className="text-xs text-amber-700">This donation is linked to a legacy donor name. Pick a current donor or create one inline to relink it.</p>
+                ) : null}
+                {donorMatches.length ? (
+                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    {donorMatches.slice(0, 6).map((donor) => {
+                      const active = donor.id === form.donorId;
+                      return (
+                        <button
+                          key={donor.id}
+                          className={cn(
+                            "rounded-md border px-3 py-3 text-left transition",
+                            active
+                              ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50/60",
+                          )}
+                          onClick={() => selectDonor(donor)}
+                          type="button"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold">{donor.fullName}</p>
+                              <p className="mt-1 truncate text-xs text-slate-500">{donor.whatsapp || donor.phone || donor.email || donor.country}</p>
+                            </div>
+                            {active ? <Check className="mt-0.5 size-4 shrink-0 text-emerald-700" aria-hidden="true" /> : null}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : donorLookup.trim() ? (
+                  <p className="text-xs text-slate-500">No donor matches “{donorLookup.trim()}”. Use inline donor creation to keep moving.</p>
+                ) : null}
+              </div>
+            )}
+
+            {showInlineDonorForm ? (
+              <div className="mt-4 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 lg:grid-cols-4">
+                <Field className="lg:col-span-2" label="Donor name">
+                  <input
+                    className={inputClass}
+                    onChange={(event) => setInlineDonorForm((current) => ({ ...current, fullName: event.target.value }))}
+                    placeholder="Full donor name"
+                    value={inlineDonorForm.fullName}
+                  />
+                </Field>
+                <Field label="WhatsApp">
+                  <input
+                    className={inputClass}
+                    onChange={(event) => setInlineDonorForm((current) => ({ ...current, whatsapp: event.target.value }))}
+                    placeholder="WhatsApp"
+                    value={inlineDonorForm.whatsapp}
+                  />
+                </Field>
+                <Field label="Phone">
+                  <input
+                    className={inputClass}
+                    onChange={(event) => setInlineDonorForm((current) => ({ ...current, phone: event.target.value }))}
+                    placeholder="Phone"
+                    value={inlineDonorForm.phone}
+                  />
+                </Field>
+                <Field label="Country">
+                  <input
+                    className={inputClass}
+                    onChange={(event) => setInlineDonorForm((current) => ({ ...current, country: event.target.value }))}
+                    placeholder="Country"
+                    value={inlineDonorForm.country}
+                  />
+                </Field>
+                <div className="flex items-end lg:col-span-3">
+                  <p className="text-xs text-slate-500">This creates a minimal donor record now so staff can finish the donation quickly. Full profile details can be completed later in Donors CRM.</p>
+                </div>
+                <div className="flex items-end justify-end">
+                  <button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800" onClick={createInlineDonor} type="button">
+                    Save donor
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-4 lg:col-span-4">
+            <p className="text-sm font-semibold text-slate-950">Allocation</p>
+            <p className="mt-1 text-sm text-slate-500">Choose whether this donation stays in the General Fund or is earmarked for a specific project.</p>
+            <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-end">
+              <div className="grid flex-1 gap-3 sm:grid-cols-2">
+                <button
+                  className={cn(
+                    "rounded-md border px-4 py-3 text-left transition",
+                    allocationMode === "GeneralFund" ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                  )}
+                  onClick={() => {
+                    setAllocationMode("GeneralFund");
+                    updateForm("projectId", "");
+                  }}
+                  type="button"
+                >
+                  <p className="text-sm font-semibold">General Fund</p>
+                  <p className="mt-1 text-xs text-slate-500">Unrestricted giving that finance can allocate later.</p>
+                </button>
+                <button
+                  className={cn(
+                    "rounded-md border px-4 py-3 text-left transition",
+                    allocationMode === "Project" ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                  )}
+                  onClick={() => {
+                    setAllocationMode("Project");
+                    if (!form.projectId && availableProjects[0]) {
+                      updateForm("projectId", availableProjects[0].id);
+                    }
+                  }}
+                  type="button"
+                >
+                  <p className="text-sm font-semibold">Project allocation</p>
+                  <p className="mt-1 text-xs text-slate-500">Earmark this donation for a named Sukoon program.</p>
+                </button>
+              </div>
+              {allocationMode === "Project" ? (
+                <Field className="w-full lg:max-w-sm" label="Project">
+                  <select
+                    className={inputClass}
+                    disabled={!availableProjects.length}
+                    onChange={(event) => updateForm("projectId", event.target.value)}
+                    value={form.projectId}
+                  >
+                    {availableProjects.length ? (
+                      availableProjects.map((project) => (
+                        <option key={project.id} value={project.id}>
+                          {project.name}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="">Create a project first</option>
+                    )}
+                  </select>
+                </Field>
+              ) : (
+                <div className="rounded-md border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900 lg:min-w-64">
+                  This donation will be recorded under General Fund.
+                </div>
+              )}
+            </div>
+          </div>
+
           <Field label="Date">
             <input className={inputClass} onChange={(event) => updateForm("date", event.target.value)} required type="date" value={form.date} />
-          </Field>
-          <Field label="Donor">
-            <select
-              className={inputClass}
-              disabled={!availableDonors.length}
-              onChange={(event) => updateForm("donorId", event.target.value)}
-              value={form.donorId}
-            >
-              {selectedDonorMissing ? (
-                <option value={form.donorId}>{form.legacyDonorName || "Legacy donor link"}</option>
-              ) : null}
-              {availableDonors.length ? (
-                availableDonors.map((donor) => (
-                  <option key={donor.id} value={donor.id}>
-                    {donor.fullName}
-                  </option>
-                ))
-              ) : (
-                <option value="">Create a donor first</option>
-              )}
-            </select>
-            {!availableDonors.length ? <span className="mt-1 block text-xs text-slate-500">Donors are managed from the Donors CRM page.</span> : null}
           </Field>
           <Field label="Original amount">
             <input className={inputClass} min="0" onChange={(event) => updateForm("originalAmount", Number(event.target.value))} required step="0.01" type="number" value={form.originalAmount} />
@@ -382,25 +673,7 @@ export function LocalDonationsManager() {
           </Field>
           <Field label="Exchange rate">
             <input className={inputClass} min="0.0001" onChange={(event) => updateForm("exchangeRate", Number(event.target.value))} required step="0.0001" type="number" value={form.exchangeRate} />
-          </Field>
-          <Field label="Project">
-            <select
-              className={inputClass}
-              disabled={!availableProjects.length}
-              onChange={(event) => updateForm("projectId", event.target.value)}
-              value={form.projectId}
-            >
-              {availableProjects.length ? (
-                availableProjects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))
-              ) : (
-                <option value="">Create a project first</option>
-              )}
-            </select>
-            {!availableProjects.length ? <span className="mt-1 block text-xs text-slate-500">Projects are managed from the Projects page.</span> : null}
+            <span className="mt-1 block text-xs text-slate-500">PKR per 1 USD. Adjust for the historical rate used when the donation was received.</span>
           </Field>
           <Field label="Funding account">
             <select className={inputClass} disabled={!availableAccounts.length} onChange={(event) => updateForm("accountId", event.target.value)} value={form.accountId}>
@@ -437,11 +710,14 @@ export function LocalDonationsManager() {
           <Field label="Receipt reference">
             <input className={inputClass} onChange={(event) => updateForm("receiptReference", event.target.value)} placeholder="Receipt no." value={form.receiptReference} />
           </Field>
-          <Field className="lg:col-span-3" label="Notes">
+          <Field className="lg:col-span-2" label="Notes">
             <input className={inputClass} onChange={(event) => updateForm("notes", event.target.value)} placeholder="Allocation or stewardship notes" value={form.notes} />
           </Field>
           <div className="flex flex-col gap-3 sm:flex-row lg:col-span-4">
-            <button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none" disabled={!availableDonors.length || !availableProjects.length || !availableAccounts.length}>
+            <button
+              className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+              disabled={!form.donorId || !availableAccounts.length || (allocationMode === "Project" && !availableProjects.length)}
+            >
               {submitLabel}
             </button>
             {editingId ? (
@@ -449,6 +725,9 @@ export function LocalDonationsManager() {
                 Cancel edit
               </button>
             ) : null}
+            <Link className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" href="/donors">
+              Open Donors CRM
+            </Link>
           </div>
         </form>
       </section>
@@ -516,7 +795,17 @@ export function LocalDonationsManager() {
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex justify-end gap-2">
-                      <button className="grid size-9 place-items-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-50" onClick={() => { setForm(donationToForm(donation)); setEditingId(donation.id); }} type="button">
+                      <button
+                        className="grid size-9 place-items-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-50"
+                        onClick={() => {
+                          setForm(donationToForm(donation));
+                          setEditingId(donation.id);
+                          setAllocationMode(donationAllocationMode(donation));
+                          setDonorLookup(donorLabel(donors, donation));
+                          setShowInlineDonorForm(false);
+                        }}
+                        type="button"
+                      >
                         <Pencil className="size-4" aria-hidden="true" />
                         <span className="sr-only">Edit donation</span>
                       </button>

@@ -3,9 +3,18 @@ import { convertedExpenseAmounts, formatMoney, type Currency } from "@/lib/finan
 import { donorLabel, deriveDonorRows } from "@/lib/local-data/donors";
 import { expenseHasProof, expenseProofFileNames, expenseProofStatusLabel } from "@/lib/local-data/expense-proofs";
 import { donationImpactsBalances, expenseImpactsBalances, transferImpactsBalances } from "@/lib/local-data/finance-rules";
-import { deriveProjectRows, projectLabel } from "@/lib/local-data/projects";
+import {
+  deriveProjectRows,
+  generalFundAllocationLabel,
+  generalOperationsProjectLabel,
+  projectLabel,
+  recordMatchesProject,
+} from "@/lib/local-data/projects";
 import { deriveApprovalRows } from "@/lib/local-data/workflows";
 import type { LocalWorkspace } from "@/lib/local-data/schema";
+
+export const operatingExpensesFilterValue = "__operating_expenses__";
+export const generalFundFilterValue = "__general_fund__";
 
 export const reportTypes = [
   { id: "monthly-donations", label: "Monthly donations" },
@@ -95,6 +104,35 @@ function accountName(workspace: LocalWorkspace, accountId: string) {
   return workspace.financeAccounts.find((account) => account.id === accountId)?.name ?? accountId;
 }
 
+function matchesProjectFilter(
+  workspace: LocalWorkspace,
+  selectedProjectId: string,
+  reference: { projectId?: string; project?: string },
+) {
+  if (!selectedProjectId) {
+    return true;
+  }
+
+  if (selectedProjectId === operatingExpensesFilterValue) {
+    return !reference.projectId && projectLabel(workspace.projects, reference) === generalOperationsProjectLabel;
+  }
+
+  if (selectedProjectId === generalFundFilterValue) {
+    return !reference.projectId && projectLabel(workspace.projects, reference) === generalFundAllocationLabel;
+  }
+
+  const project = workspace.projects.find((item) => item.id === selectedProjectId);
+  return project ? recordMatchesProject(project, reference) : false;
+}
+
+function reportExpenseProjectLabel(workspace: LocalWorkspace, reference: { projectId?: string; project?: string }) {
+  if (!reference.projectId && projectLabel(workspace.projects, reference) === generalOperationsProjectLabel) {
+    return "Operating Expenses";
+  }
+
+  return projectLabel(workspace.projects, reference);
+}
+
 function reportResult(
   type: ReportType,
   title: string,
@@ -134,7 +172,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
       .filter((donation) =>
         donationImpactsBalances(donation) &&
         inDateRange(donation.date, filters) &&
-        (filters.projectId ? donation.projectId === filters.projectId : true) &&
+        matchesProjectFilter(workspace, filters.projectId, donation) &&
         (filters.accountId ? donation.accountId === filters.accountId : true) &&
         (filters.donorId ? donation.donorId === filters.donorId : true) &&
         (filters.currency === "All" || donation.originalCurrency === filters.currency) &&
@@ -184,7 +222,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
       .filter((expense) =>
         expenseImpactsBalances(expense) &&
         inDateRange(expense.date, filters) &&
-        (filters.projectId ? expense.projectId === filters.projectId : true) &&
+        matchesProjectFilter(workspace, filters.projectId, expense) &&
         (filters.accountId ? expense.fundingAccountId === filters.accountId : true) &&
         (filters.category ? expense.category === filters.category : true) &&
         (filters.status ? expense.approvalStatus === filters.status : true) &&
@@ -269,7 +307,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
       .filter((expense) =>
         expenseImpactsBalances(expense) &&
         inDateRange(expense.date, filters) &&
-        (filters.projectId ? expense.projectId === filters.projectId : true) &&
+        matchesProjectFilter(workspace, filters.projectId, expense) &&
         (filters.accountId ? expense.fundingAccountId === filters.accountId : true) &&
         (filters.status ? expense.approvalStatus === filters.status : true) &&
         (filters.currency === "All" || expense.originalCurrency === filters.currency),
@@ -354,7 +392,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
         .filter((transfer) =>
           transferImpactsBalances(transfer) &&
           inDateRange(transfer.date, filters) &&
-          (filters.projectId ? transfer.projectId === filters.projectId : true) &&
+          matchesProjectFilter(workspace, filters.projectId, transfer) &&
           (filters.status ? transfer.status === filters.status : true) &&
           (filters.currency === "All" || transfer.originalCurrency === filters.currency),
         )
@@ -433,7 +471,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
           .filter((donation) =>
             inDateRange(donation.date, filters) &&
             !donation.receiptReference &&
-            (filters.projectId ? donation.projectId === filters.projectId : true) &&
+            matchesProjectFilter(workspace, filters.projectId, donation) &&
             (filters.accountId ? donation.accountId === filters.accountId : true) &&
             (filters.donorId ? donation.donorId === filters.donorId : true),
           )
@@ -448,21 +486,21 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
           .filter((expense) =>
             inDateRange(expense.date, filters) &&
             !expense.receiptReference &&
-            (filters.projectId ? expense.projectId === filters.projectId : true) &&
+            matchesProjectFilter(workspace, filters.projectId, expense) &&
             (filters.accountId ? expense.fundingAccountId === filters.accountId : true),
           )
           .map((expense) => ({
             date: expense.date,
             type: "Expense",
             source: expense.description || expense.category,
-            project: projectLabel(workspace.projects, expense),
+            project: reportExpenseProjectLabel(workspace, expense),
             status: expense.approvalStatus,
           })),
         ...workspace.transfers
           .filter((transfer) =>
             inDateRange(transfer.date, filters) &&
             !transfer.reference &&
-            (filters.projectId ? transfer.projectId === filters.projectId : true),
+            matchesProjectFilter(workspace, filters.projectId, transfer),
           )
           .map((transfer) => ({
             date: transfer.date,
@@ -498,7 +536,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
         .filter((expense) =>
           inDateRange(expense.date, filters) &&
           !expenseHasProof(expense) &&
-          (filters.projectId ? expense.projectId === filters.projectId : true) &&
+          matchesProjectFilter(workspace, filters.projectId, expense) &&
           (filters.accountId ? expense.fundingAccountId === filters.accountId : true) &&
           (filters.category ? expense.category === filters.category : true) &&
           (filters.status ? expense.approvalStatus === filters.status : true) &&
@@ -507,7 +545,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
         .map((expense) => ({
           date: expense.date,
           description: expense.description || expense.category,
-          project: projectLabel(workspace.projects, expense),
+          project: reportExpenseProjectLabel(workspace, expense),
           category: expense.category,
           amountPkr: formatMoney(convertedExpenseAmounts(expense).pkr, "PKR"),
           amountUsd: formatMoney(convertedExpenseAmounts(expense).usd, "USD"),
@@ -544,6 +582,8 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
       approvalRows
         .filter((approval) =>
           (filters.projectId ? approval.projectId === filters.projectId : true) &&
+          (filters.projectId === operatingExpensesFilterValue ? approval.projectName === "Operating Expenses" : true) &&
+          (filters.projectId === generalFundFilterValue ? approval.projectName === generalFundAllocationLabel : true) &&
           (filters.status ? approval.status === filters.status : true),
         )
         .map((approval) => ({
@@ -586,7 +626,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
       if (
         donationImpactsBalances(donation) &&
         inDateRange(donation.date, filters) &&
-        (!filters.projectId || donation.projectId === filters.projectId) &&
+        matchesProjectFilter(workspace, filters.projectId, donation) &&
         (!filters.accountId || donation.accountId === filters.accountId) &&
         (!filters.donorId || donation.donorId === filters.donorId) &&
         (filters.currency === "All" || donation.originalCurrency === filters.currency)
@@ -601,7 +641,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
       if (
         expenseImpactsBalances(expense) &&
         inDateRange(expense.date, filters) &&
-        (!filters.projectId || expense.projectId === filters.projectId) &&
+        matchesProjectFilter(workspace, filters.projectId, expense) &&
         (!filters.accountId || expense.fundingAccountId === filters.accountId) &&
         (!filters.category || expense.category === filters.category) &&
         (!filters.status || expense.approvalStatus === filters.status) &&
@@ -617,7 +657,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
       if (
         transferImpactsBalances(transfer) &&
         inDateRange(transfer.date, filters) &&
-        (!filters.projectId || transfer.projectId === filters.projectId) &&
+        matchesProjectFilter(workspace, filters.projectId, transfer) &&
         (!filters.status || transfer.status === filters.status) &&
         (filters.currency === "All" || transfer.originalCurrency === filters.currency)
       ) {
@@ -664,7 +704,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
       if (
         donationImpactsBalances(donation) &&
         inDateRange(donation.date, filters) &&
-        (!filters.projectId || donation.projectId === filters.projectId) &&
+        matchesProjectFilter(workspace, filters.projectId, donation) &&
         (!filters.donorId || donation.donorId === filters.donorId)
       ) {
         const key = yearKey(donation.date);
@@ -681,7 +721,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
       if (
         expenseImpactsBalances(expense) &&
         inDateRange(expense.date, filters) &&
-        (!filters.projectId || expense.projectId === filters.projectId) &&
+        matchesProjectFilter(workspace, filters.projectId, expense) &&
         (!filters.category || expense.category === filters.category)
       ) {
         const key = yearKey(expense.date);
@@ -695,7 +735,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
       return result;
     }, {}),
     transfers: workspace.transfers.reduce<Record<string, { count: number; pkr: number; usd: number }>>((result, transfer) => {
-      if (transferImpactsBalances(transfer) && inDateRange(transfer.date, filters) && (!filters.projectId || transfer.projectId === filters.projectId)) {
+      if (transferImpactsBalances(transfer) && inDateRange(transfer.date, filters) && matchesProjectFilter(workspace, filters.projectId, transfer)) {
         const key = yearKey(transfer.date);
         const current = result[key] ?? { count: 0, pkr: 0, usd: 0 };
         current.count += 1;

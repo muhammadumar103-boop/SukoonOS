@@ -212,12 +212,9 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
     workspaceRef.current = localWorkspace;
     setAccounts(localWorkspace.financeAccounts);
     setProjects(localWorkspace.projects);
-    const defaultProject = activeProjectOptions(localWorkspace.projects)[0];
     const defaultAccount = localWorkspace.financeAccounts.find((account) => account.currency === emptyForm.originalCurrency);
     setForm((current) => ({
       ...current,
-      projectId: defaultProject?.id ?? current.projectId,
-      project: defaultProject?.name ?? current.project,
       fundingAccountId: defaultAccount?.id ?? "",
     }));
 
@@ -397,13 +394,10 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
   }
 
   function resetForm() {
-    const firstProject = activeProjectOptions(projects)[0];
     const firstAccount = accounts.find((account) => account.currency === emptyForm.originalCurrency);
     clearPendingProofState();
     setForm({
       ...emptyForm,
-      projectId: firstProject?.id ?? "",
-      project: firstProject?.name ?? "General Operations",
       fundingAccountId: firstAccount?.id ?? "",
     });
     setEditingId(null);
@@ -413,11 +407,6 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
     event.preventDefault();
     const selectedProject = projects.find((project) => project.id === form.projectId);
     const selectedAccount = accounts.find((account) => account.id === form.fundingAccountId && account.currency === form.originalCurrency);
-    if (!selectedProject) {
-      setNotice({ tone: "error", message: "Select a project before saving an expense." });
-      return;
-    }
-
     if (!selectedAccount) {
       setNotice({ tone: "error", message: "Select a matching funding account before saving an expense." });
       return;
@@ -439,7 +428,8 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
     const nextExpense: LocalExpense = {
       id: editingId ?? createId(),
       ...form,
-      project: selectedProject.name,
+      projectId: selectedProject?.id ?? "",
+      project: selectedProject?.name ?? "General Operations",
       fundingAccountId: selectedAccount.id,
       originalAmount: Number(form.originalAmount),
       exchangeRate: Number(form.exchangeRate),
@@ -931,25 +921,21 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
           <Field label="Project">
             <select
               className={inputClass}
-              disabled={!availableProjects.length}
               onChange={(event) => {
                 const nextProject = projects.find((project) => project.id === event.target.value);
                 updateForm("projectId", event.target.value);
-                updateForm("project", nextProject?.name ?? form.project);
+                updateForm("project", nextProject?.name ?? "General Operations");
               }}
               value={form.projectId}
             >
-              {availableProjects.length ? (
-                availableProjects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))
-              ) : (
-                <option value="">Create a project first</option>
-              )}
+              <option value="">General Operations (no project link)</option>
+              {availableProjects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
             </select>
-            {!availableProjects.length ? <span className="mt-1 block text-xs text-slate-500">Projects are managed from the Projects page.</span> : null}
+            <span className="mt-1 block text-xs text-slate-500">Leave this on General Operations for office, admin, logistics, or shared operational costs.</span>
           </Field>
           <Field label="Payment method">
             <select className={inputClass} onChange={(event) => updatePaymentMethod(event.target.value)} value={form.paymentMethod}>
@@ -1073,8 +1059,8 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
             />
           </Field>
           <div className="flex flex-col gap-3 sm:flex-row lg:col-span-4">
-            <button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none" disabled={!availableProjects.length || !availableFundingAccounts.length}>
-              {!availableProjects.length ? "Create project first" : !availableFundingAccounts.length ? `Create ${form.originalCurrency} account first` : editingId ? "Save changes" : "Add expense"}
+            <button className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none" disabled={!availableFundingAccounts.length}>
+              {!availableFundingAccounts.length ? `Create ${form.originalCurrency} account first` : editingId ? "Save changes" : "Add expense"}
             </button>
             {editingId ? (
               <button className="h-10 rounded-md border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" onClick={resetForm} type="button">

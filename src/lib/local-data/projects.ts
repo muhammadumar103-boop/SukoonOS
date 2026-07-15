@@ -3,6 +3,8 @@ import type { FinanceLedgerEntry } from "@/lib/finance/ledger";
 import { donationImpactsBalances, expenseImpactsBalances, transferImpactsBalances } from "@/lib/local-data/finance-rules";
 import type { LocalProject, LocalWorkspace } from "@/lib/local-data/schema";
 
+export const generalFundAllocationLabel = "General Fund";
+export const generalOperationsProjectLabel = "General Operations";
 export const projectTypes = [
   "Hospital",
   "Water Well",
@@ -187,7 +189,7 @@ export function slugifyProjectName(name: string) {
 export function normalizeProjectName(name: string) {
   const trimmed = name.trim();
   if (!trimmed) {
-    return "General Operations";
+    return generalOperationsProjectLabel;
   }
 
   return projectAliases[trimmed] ?? trimmed;
@@ -363,6 +365,14 @@ export function recordMatchesProject(project: LocalProject, reference: ProjectRe
   }
 
   return normalizeProjectName(reference.project ?? "") === normalizeProjectName(project.name);
+}
+
+export function recordMatchesProjectReference(reference: ProjectReference, target: ProjectReference) {
+  if (reference.projectId && target.projectId) {
+    return reference.projectId === target.projectId;
+  }
+
+  return normalizeProjectName(reference.project ?? "") === normalizeProjectName(target.project ?? "");
 }
 
 export function activeProjectOptions(projects: LocalProject[]) {

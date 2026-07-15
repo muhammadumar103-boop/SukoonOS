@@ -12,6 +12,7 @@ import {
   deriveProjectRows,
   projectStatuses,
   projectTypes,
+  recordMatchesProject,
   type DerivedProjectRow,
 } from "@/lib/local-data/projects";
 import { loadLocalWorkspace, saveAuditedWorkspace } from "@/lib/local-data/repository";
@@ -612,9 +613,9 @@ function ProjectDetailCard({
   onSelectEdit: () => void;
   workspace: LocalWorkspace | null;
 }) {
-  const relatedDonations = workspace?.donations.filter((donation) => donation.projectId === project.id).slice(0, 4) ?? [];
-  const relatedExpenses = workspace?.expenses.filter((expense) => expense.projectId === project.id).slice(0, 4) ?? [];
-  const relatedTransfers = workspace?.transfers.filter((transfer) => transfer.projectId === project.id).slice(0, 4) ?? [];
+  const relatedDonations = workspace?.donations.filter((donation) => recordMatchesProject(project, donation)).slice(0, 4) ?? [];
+  const relatedExpenses = workspace?.expenses.filter((expense) => recordMatchesProject(project, expense)).slice(0, 4) ?? [];
+  const relatedTransfers = workspace?.transfers.filter((transfer) => recordMatchesProject(project, transfer)).slice(0, 4) ?? [];
 
   return (
     <section className="rounded-lg border border-emerald-100 bg-white p-5 shadow-sm shadow-emerald-950/5">

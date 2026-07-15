@@ -5,6 +5,7 @@ import {
   financialRecordSignedAmounts,
   transferImpactsBalances,
 } from "@/lib/local-data/finance-rules";
+import { recordMatchesProjectReference } from "@/lib/local-data/projects";
 import type { LocalWorkspace } from "@/lib/local-data/schema";
 
 export function donorLinkCounts(workspace: LocalWorkspace, donorId: string) {
@@ -14,14 +15,17 @@ export function donorLinkCounts(workspace: LocalWorkspace, donorId: string) {
 }
 
 export function projectLinkCounts(workspace: LocalWorkspace, projectId: string) {
+  const project = workspace.projects.find((item) => item.id === projectId);
+  const projectReference = { projectId, project: project?.name ?? "" };
+
   return {
     approvals: workspace.approvals.filter((approval) => approval.sourceId === projectId).length,
-    budgets: workspace.financeBudgets.filter((budget) => budget.projectId === projectId).length,
-    donations: workspace.donations.filter((donation) => donation.projectId === projectId).length,
-    expenses: workspace.expenses.filter((expense) => expense.projectId === projectId).length,
-    financialRecords: workspace.financialRecords.filter((record) => record.projectId === projectId).length,
+    budgets: workspace.financeBudgets.filter((budget) => recordMatchesProjectReference(budget, projectReference)).length,
+    donations: workspace.donations.filter((donation) => recordMatchesProjectReference(donation, projectReference)).length,
+    expenses: workspace.expenses.filter((expense) => recordMatchesProjectReference(expense, projectReference)).length,
+    financialRecords: workspace.financialRecords.filter((record) => recordMatchesProjectReference(record, projectReference)).length,
     tasks: workspace.tasks.filter((task) => task.projectId === projectId).length,
-    transfers: workspace.transfers.filter((transfer) => transfer.projectId === projectId).length,
+    transfers: workspace.transfers.filter((transfer) => recordMatchesProjectReference(transfer, projectReference)).length,
   };
 }
 

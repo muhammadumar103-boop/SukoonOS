@@ -35,7 +35,7 @@ import {
 } from "@/lib/finance/local-finance";
 import { expenseImpactsBalances, validatePositiveMoneyInput } from "@/lib/local-data/finance-rules";
 import { accountLinkCounts, deriveReconciliationChecks } from "@/lib/local-data/integrity";
-import { activeProjectOptions, projectLabel } from "@/lib/local-data/projects";
+import { activeProjectOptions, projectLabel, recordMatchesProjectReference } from "@/lib/local-data/projects";
 import { loadLocalWorkspace, saveAuditedWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
 import type { LocalDonation, LocalFinancialRecord, LocalProject, LocalTransfer, LocalWorkspace } from "@/lib/local-data/schema";
 import { cn } from "@/lib/utils";
@@ -181,8 +181,11 @@ export function FinanceModule() {
     return budgets.map((budget) => {
       const spentNative = expenses
         .filter((expense) => {
-          const sameProject = budget.projectId ? expense.projectId === budget.projectId : expense.project === budget.project;
-          return sameProject && expense.category === budget.category && expenseImpactsBalances(expense);
+          return (
+            recordMatchesProjectReference(expense, { projectId: budget.projectId, project: budget.project }) &&
+            expense.category === budget.category &&
+            expenseImpactsBalances(expense)
+          );
         })
         .reduce((sum, expense) => {
           const amounts = convertedExpenseAmounts(expense);
