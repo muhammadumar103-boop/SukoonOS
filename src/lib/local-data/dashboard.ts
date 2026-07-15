@@ -3,7 +3,7 @@ import { convertedExpenseAmounts, formatMoney } from "@/lib/finance/local-financ
 import { deriveDonorRows } from "@/lib/local-data/donors";
 import { donationImpactsBalances, expenseImpactsBalances } from "@/lib/local-data/finance-rules";
 import { deriveProjectRows } from "@/lib/local-data/projects";
-import { deriveApprovalRows, deriveTaskRows } from "@/lib/local-data/workflows";
+import { deriveAccountBalanceRows, deriveApprovalRows, deriveTaskRows } from "@/lib/local-data/workflows";
 import type { LocalWorkspace } from "@/lib/local-data/schema";
 
 type DashboardActivity = {
@@ -45,34 +45,10 @@ export function deriveDashboardData(workspace: LocalWorkspace) {
   const thisMonthDonations = receivedDonations.filter((donation) => donation.date.startsWith(currentMonth));
   const thisMonthExpenses = approvedExpenses.filter((expense) => expense.date.startsWith(currentMonth));
   const overdueDonors = donorRows.filter((donor) => donor.effectiveReminderStatus === "Overdue");
-  const accountBalances = workspace.financeAccounts.map((account) => {
-    const matchingEntries = ledger.filter((entry) => entry.accountId === account.id || entry.contraAccountId === account.id);
-    const movementTotal = matchingEntries.reduce((sum, entry) => {
-      if (entry.type === "Transfer") {
-        if (entry.accountId === account.id) {
-          return sum - (account.currency === "PKR" ? entry.pkrAmount : entry.usdAmount);
-        }
-
-        if (entry.contraAccountId === account.id) {
-          return sum + (account.currency === "PKR" ? entry.pkrAmount : entry.usdAmount);
-        }
-
-        return sum;
-      }
-
-      if (entry.accountId !== account.id) {
-        return sum;
-      }
-
-      return sum + (account.currency === "PKR" ? entry.netPkrAmount : entry.netUsdAmount);
-    }, 0);
-
-    return {
-      ...account,
-      balance: account.openingBalance + movementTotal,
-      movementTotal,
-    };
-  });
+  const accountBalances = deriveAccountBalanceRows(workspace).map((account) => ({
+    ...account,
+    movementTotal: account.balance - account.openingBalance,
+  }));
 
   const totalBankBalance = accountBalances.reduce(
     (result, account) => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { formatMoney } from "@/lib/finance/local-finance";
 import { deriveDashboardData } from "@/lib/local-data/dashboard";
-import { createSampleWorkspace } from "@/lib/local-data/migrations";
+import { createSampleWorkspace, migrateLocalWorkspace } from "@/lib/local-data/migrations";
 import { generateReport } from "@/lib/local-data/reporting";
 
 describe("dashboard and reporting totals", () => {
@@ -212,5 +212,43 @@ describe("dashboard and reporting totals", () => {
       proofStatus: "Missing proof",
       attachmentFiles: "None",
     });
+  });
+
+  it("ignores non-final transfers when deriving dashboard account balances", () => {
+    const baselineWorkspace = createSampleWorkspace();
+    const baselineDashboard = deriveDashboardData(baselineWorkspace);
+    const workspace = migrateLocalWorkspace({
+      ...createSampleWorkspace(),
+      transfers: [
+        ...baselineWorkspace.transfers,
+        {
+          id: "transfer-draft",
+          fromAccountId: "main-donations-bank",
+          toAccountId: "operations-bank-pkr",
+          projectId: "project-food-parcels",
+          project: "Food Parcels",
+          date: "2026-07-15",
+          status: "Review",
+          reference: "TR-REVIEW",
+          notes: "Awaiting approval",
+          originalAmount: 250,
+          originalCurrency: "USD",
+          exchangeRate: 278,
+          pkrAmount: 69500,
+          usdAmount: 250,
+        },
+      ],
+    });
+
+    const dashboard = deriveDashboardData(workspace);
+    const baselineUsdAccount = baselineDashboard.accountBalances.find((account) => account.id === "main-donations-bank");
+    const baselinePkrAccount = baselineDashboard.accountBalances.find((account) => account.id === "operations-bank-pkr");
+    const usdAccount = dashboard.accountBalances.find((account) => account.id === "main-donations-bank");
+    const pkrAccount = dashboard.accountBalances.find((account) => account.id === "operations-bank-pkr");
+
+    expect(usdAccount?.movementTotal).toBe(baselineUsdAccount?.movementTotal);
+    expect(usdAccount?.balance).toBe(baselineUsdAccount?.balance);
+    expect(pkrAccount?.movementTotal).toBe(baselinePkrAccount?.movementTotal);
+    expect(pkrAccount?.balance).toBe(baselinePkrAccount?.balance);
   });
 });
