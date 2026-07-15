@@ -2,12 +2,18 @@
 
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { DatabaseZap, Download, RotateCcw, Trash2, Upload } from "lucide-react";
-import { exportLocalWorkspace, importLocalWorkspace, loadLocalWorkspace, resetLocalWorkspace } from "@/lib/local-data/repository";
+import {
+  exportLocalWorkspace,
+  importLocalWorkspace,
+  loadLocalWorkspace,
+  maxLocalWorkspaceImportBytes,
+  resetLocalWorkspace,
+} from "@/lib/local-data/repository";
 
 export function LocalWorkspaceBanner() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [sampleDataEnabled, setSampleDataEnabled] = useState(true);
-  const [counts, setCounts] = useState({ expenses: 0, donations: 0, transfers: 0, accounts: 0, budgets: 0, donors: 0 });
+  const [counts, setCounts] = useState({ expenses: 0, donations: 0, transfers: 0, accounts: 0, budgets: 0, donors: 0, financialRecords: 0 });
 
   useEffect(() => {
     const workspace = loadLocalWorkspace();
@@ -19,6 +25,7 @@ export function LocalWorkspaceBanner() {
       accounts: workspace.financeAccounts.length,
       budgets: workspace.financeBudgets.length,
       donors: workspace.donors.length,
+      financialRecords: workspace.financialRecords.length,
     });
   }, []);
 
@@ -60,6 +67,10 @@ export function LocalWorkspaceBanner() {
     }
 
     try {
+      if (file.size > maxLocalWorkspaceImportBytes) {
+        throw new Error(`The selected file is larger than ${Math.round(maxLocalWorkspaceImportBytes / 1024 / 1024)} MB.`);
+      }
+
       const text = await file.text();
       importLocalWorkspace(text);
       window.location.reload();
@@ -85,7 +96,7 @@ export function LocalWorkspaceBanner() {
           </p>
           <p className="mt-1 text-xs font-medium text-emerald-900/70">Local demo records exist only in this browser unless you export them.</p>
           <p className="mt-2 text-xs text-emerald-900/70">
-            {counts.accounts} accounts, {counts.budgets} budgets, {counts.donations} donations, {counts.transfers} transfers, {counts.expenses} expenses, {counts.donors} donors
+            {counts.accounts} accounts, {counts.budgets} budgets, {counts.donations} donations, {counts.transfers} transfers, {counts.financialRecords} other finance records, {counts.expenses} expenses, {counts.donors} donors
           </p>
         </div>
 

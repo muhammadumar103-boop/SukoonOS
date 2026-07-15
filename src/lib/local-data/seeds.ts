@@ -1,6 +1,6 @@
 import { defaultUsdToPkrRate } from "@/lib/finance/local-finance";
 import { sampleLocalProjects } from "@/lib/local-data/projects";
-import type { LocalApproval, LocalDonation, LocalDonor, LocalTask, LocalTransfer } from "@/lib/local-data/schema";
+import type { LocalApproval, LocalDonation, LocalDonor, LocalFinancialRecord, LocalTask, LocalTransfer } from "@/lib/local-data/schema";
 
 function moneyValues(originalAmount: number, originalCurrency: "PKR" | "USD", exchangeRate: number) {
   if (originalCurrency === "PKR") {
@@ -116,6 +116,54 @@ export const sampleLocalTransfers: LocalTransfer[] = [
     status: "Completed",
     reference: "TRF-0003",
     notes: "Sample allocation to Orphan Sponsorship.",
+    ...moneyValues(15000, "USD", defaultUsdToPkrRate),
+  },
+];
+
+export const sampleLocalFinancialRecords: LocalFinancialRecord[] = [
+  {
+    id: "financial-record-refund-1",
+    type: "Refund",
+    accountId: "operations-bank-pkr",
+    projectId: "project-hospital",
+    project: "Hospital Project",
+    date: "2026-07-08",
+    status: "Posted",
+    description: "Vendor refund for duplicate medical supply invoice",
+    party: "City Medical Supplies",
+    method: "Bank Transfer",
+    reference: "REF-1021",
+    notes: "Posted vendor refund from local demo seed.",
+    ...moneyValues(85000, "PKR", defaultUsdToPkrRate),
+  },
+  {
+    id: "financial-record-fee-1",
+    type: "Fee",
+    accountId: "operations-bank-pkr",
+    projectId: "project-general-operations",
+    project: "General Operations",
+    date: "2026-07-07",
+    status: "Posted",
+    description: "Bank transfer fee for program account movement",
+    party: "Bank",
+    method: "Bank Transfer",
+    reference: "FEE-3308",
+    notes: "Posted bank fee from local demo seed.",
+    ...moneyValues(2600, "PKR", defaultUsdToPkrRate),
+  },
+  {
+    id: "financial-record-adjustment-1",
+    type: "Adjustment",
+    accountId: "main-donations-bank",
+    projectId: "project-general-operations",
+    project: "General Operations",
+    date: "2026-07-05",
+    status: "Approved",
+    description: "Opening balance adjustment for local demo ledger",
+    party: "Finance",
+    method: "Adjustment",
+    reference: "ADJ-0001",
+    notes: "Approved opening balance adjustment from local demo seed.",
     ...moneyValues(15000, "USD", defaultUsdToPkrRate),
   },
 ];

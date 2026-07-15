@@ -4,18 +4,20 @@ import {
   localWorkspaceSchemaVersion,
   type LocalDonor,
   type LocalDonation,
+  type LocalFinancialRecord,
   type LocalProject,
   type LocalTask,
   type LocalTransfer,
   type LocalWorkspace,
 } from "@/lib/local-data/schema";
 
+const strictObject = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();
 const currencySchema = z.enum(["PKR", "USD"]);
 const statusSchema = z.enum(["Active", "Review", "Paused"]);
-const moneySchema = z.object({
-  originalAmount: z.number(),
+const moneySchema = strictObject({
+  originalAmount: z.number().positive(),
   originalCurrency: currencySchema,
-  exchangeRate: z.number().positive(),
+  exchangeRate: z.number().positive().finite(),
   pkrAmount: z.number(),
   usdAmount: z.number(),
 });
@@ -32,7 +34,7 @@ export const localDonationSchema = moneySchema.extend({
   status: z.enum(["Pledged", "Processing", "Received", "Refunded", "Cancelled"]),
   receiptReference: z.string(),
   notes: z.string(),
-}) as z.ZodType<LocalDonation>;
+}).strict() as z.ZodType<LocalDonation>;
 
 export const localTransferSchema = moneySchema.extend({
   id: z.string().min(1),
@@ -41,12 +43,27 @@ export const localTransferSchema = moneySchema.extend({
   projectId: z.string(),
   project: z.string().min(1),
   date: z.string().min(1),
-  status: z.enum(["Draft", "Review", "Scheduled", "Completed", "Cancelled"]),
+  status: z.enum(["Draft", "Review", "Scheduled", "Completed", "Cancelled", "Voided"]),
   reference: z.string(),
   notes: z.string(),
-}) as z.ZodType<LocalTransfer>;
+}).strict() as z.ZodType<LocalTransfer>;
 
-export const localDonorSchema = z.object({
+export const localFinancialRecordSchema = moneySchema.extend({
+  id: z.string().min(1),
+  type: z.enum(["Refund", "Fee", "Adjustment"]),
+  accountId: z.string().min(1),
+  projectId: z.string(),
+  project: z.string().min(1),
+  date: z.string().min(1),
+  status: z.enum(["Draft", "Pending", "Approved", "Posted", "Voided"]),
+  description: z.string().min(1),
+  party: z.string(),
+  method: z.string().min(1),
+  reference: z.string(),
+  notes: z.string(),
+}).strict() as z.ZodType<LocalFinancialRecord>;
+
+export const localDonorSchema = strictObject({
   id: z.string().min(1),
   fullName: z.string().min(1),
   phone: z.string(),
@@ -71,7 +88,7 @@ export const localDonorSchema = z.object({
   reminderStatus: z.enum(["None", "Upcoming", "Overdue", "Completed"]),
 }) as z.ZodType<LocalDonor>;
 
-export const localProjectSchema = z.object({
+export const localProjectSchema = strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
   projectType: z.string().min(1),
@@ -118,7 +135,7 @@ export const localProjectSchema = z.object({
   archivedAt: z.string(),
 }) as z.ZodType<LocalProject>;
 
-export const localTaskSchema = z.object({
+export const localTaskSchema = strictObject({
   id: z.string().min(1),
   title: z.string().min(1),
   dueDate: z.string(),
@@ -128,7 +145,7 @@ export const localTaskSchema = z.object({
   status: z.enum(["Open", "In Progress", "Blocked", "Done"]),
 }) as z.ZodType<LocalTask>;
 
-export const localApprovalSchema = z.object({
+export const localApprovalSchema = strictObject({
   id: z.string().min(1),
   sourceType: z.enum(["Expense", "Transfer", "Project Update"]),
   sourceId: z.string(),
@@ -140,13 +157,13 @@ export const localApprovalSchema = z.object({
   notes: z.string(),
 }) as z.ZodType<LocalApproval>;
 
-export const localWorkspaceSchema = z.object({
+export const localWorkspaceSchema = strictObject({
   schemaVersion: z.literal(localWorkspaceSchemaVersion),
   sampleDataEnabled: z.boolean(),
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
   financeAccounts: z.array(
-    z.object({
+    strictObject({
       id: z.string().min(1),
       name: z.string().min(1),
       kind: z.enum(["Bank", "Cash"]),
@@ -158,7 +175,7 @@ export const localWorkspaceSchema = z.object({
     }),
   ),
   financeBudgets: z.array(
-    z.object({
+    strictObject({
       id: z.string().min(1),
       name: z.string().min(1),
       projectId: z.string(),
@@ -171,12 +188,12 @@ export const localWorkspaceSchema = z.object({
     }),
   ),
   expenses: z.array(
-    z.object({
+    strictObject({
       id: z.string().min(1),
       date: z.string().min(1),
-      originalAmount: z.number(),
+      originalAmount: z.number().positive(),
       originalCurrency: currencySchema,
-      exchangeRate: z.number().positive(),
+      exchangeRate: z.number().positive().finite(),
       category: z.string().min(1),
       projectId: z.string(),
       project: z.string().min(1),
@@ -185,19 +202,20 @@ export const localWorkspaceSchema = z.object({
       paymentMethod: z.string(),
       paidBy: z.string(),
       receiptReference: z.string(),
-      approvalStatus: z.enum(["Draft", "Pending", "Approved", "Paid", "Rejected"]),
+      approvalStatus: z.enum(["Draft", "Pending", "Approved", "Paid", "Rejected", "Voided"]),
       notes: z.string(),
     }),
   ),
   donations: z.array(localDonationSchema),
   transfers: z.array(localTransferSchema),
+  financialRecords: z.array(localFinancialRecordSchema),
   projects: z.array(localProjectSchema),
   donors: z.array(localDonorSchema),
   tasks: z.array(localTaskSchema),
   approvals: z.array(localApprovalSchema),
   reports: z.array(z.any()),
   auditLog: z.array(
-    z.object({
+    strictObject({
       id: z.string().min(1),
       entityType: z.string().min(1),
       entityId: z.string().min(1),

@@ -1,7 +1,7 @@
 import type { Currency, FinanceAccount, FinanceBudget, LocalExpense } from "@/lib/finance/local-finance";
 
 export const localWorkspaceStorageKey = "sukoonos.local.workspace.v1";
-export const localWorkspaceSchemaVersion = 1;
+export const localWorkspaceSchemaVersion = 2;
 export const localWorkspaceBackupsStorageKey = "sukoonos.local.workspace.backups.v1";
 
 export type LocalTransactionType = "Donation" | "Expense" | "Transfer" | "Refund" | "Fee" | "Adjustment";
@@ -35,7 +35,22 @@ export type LocalTransfer = LocalMoney & {
   projectId: string;
   project: string;
   date: string;
-  status: "Draft" | "Review" | "Scheduled" | "Completed" | "Cancelled";
+  status: "Draft" | "Review" | "Scheduled" | "Completed" | "Cancelled" | "Voided";
+  reference: string;
+  notes: string;
+};
+
+export type LocalFinancialRecord = LocalMoney & {
+  id: string;
+  type: "Refund" | "Fee" | "Adjustment";
+  accountId: string;
+  projectId: string;
+  project: string;
+  date: string;
+  status: "Draft" | "Pending" | "Approved" | "Posted" | "Voided";
+  description: string;
+  party: string;
+  method: string;
   reference: string;
   notes: string;
 };
@@ -138,6 +153,7 @@ export type LocalWorkspace = {
   expenses: LocalExpense[];
   donations: LocalDonation[];
   transfers: LocalTransfer[];
+  financialRecords: LocalFinancialRecord[];
   projects: LocalProject[];
   donors: LocalDonor[];
   tasks: LocalTask[];

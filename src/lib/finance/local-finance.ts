@@ -1,6 +1,6 @@
 export type Currency = "PKR" | "USD";
 
-export type ApprovalStatus = "Draft" | "Pending" | "Approved" | "Paid" | "Rejected";
+export type ApprovalStatus = "Draft" | "Pending" | "Approved" | "Paid" | "Rejected" | "Voided";
 
 export type AccountKind = "Bank" | "Cash";
 
@@ -82,7 +82,7 @@ export const sukoonProjects = [
 
 export const paymentMethods = ["Cash", "Bank Transfer", "Card", "Cheque", "Mobile Wallet"];
 
-export const approvalStatuses: ApprovalStatus[] = ["Draft", "Pending", "Approved", "Paid", "Rejected"];
+export const approvalStatuses: ApprovalStatus[] = ["Draft", "Pending", "Approved", "Paid", "Rejected", "Voided"];
 
 export const defaultFinanceAccounts: FinanceAccount[] = [
   {

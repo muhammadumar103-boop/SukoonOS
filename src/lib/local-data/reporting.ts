@@ -1,6 +1,7 @@
 import { accountBalanceFromLedger, buildFinanceLedger } from "@/lib/finance/ledger";
 import { convertedExpenseAmounts, formatMoney, type Currency } from "@/lib/finance/local-finance";
 import { donorLabel, deriveDonorRows } from "@/lib/local-data/donors";
+import { donationImpactsBalances, expenseImpactsBalances, transferImpactsBalances } from "@/lib/local-data/finance-rules";
 import { deriveProjectRows, projectLabel } from "@/lib/local-data/projects";
 import { deriveApprovalRows } from "@/lib/local-data/workflows";
 import type { LocalWorkspace } from "@/lib/local-data/schema";
@@ -129,7 +130,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
   if (type === "monthly-donations") {
     const grouped = workspace.donations
       .filter((donation) =>
-        donation.status === "Received" &&
+        donationImpactsBalances(donation) &&
         inDateRange(donation.date, filters) &&
         (filters.projectId ? donation.projectId === filters.projectId : true) &&
         (filters.accountId ? donation.accountId === filters.accountId : true) &&
@@ -140,9 +141,10 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
       .reduce<Record<string, { count: number; pkr: number; usd: number }>>((result, donation) => {
         const key = monthKey(donation.date);
         const current = result[key] ?? { count: 0, pkr: 0, usd: 0 };
+        const sign = donation.status === "Refunded" ? -1 : 1;
         current.count += 1;
-        current.pkr += donation.pkrAmount;
-        current.usd += donation.usdAmount;
+        current.pkr += donation.pkrAmount * sign;
+        current.usd += donation.usdAmount * sign;
         result[key] = current;
         return result;
       }, {});
@@ -178,6 +180,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
   if (type === "monthly-expenses") {
     const grouped = workspace.expenses
       .filter((expense) =>
+        expenseImpactsBalances(expense) &&
         inDateRange(expense.date, filters) &&
         (filters.projectId ? expense.projectId === filters.projectId : true) &&
         (filters.accountId ? expense.fundingAccountId === filters.accountId : true) &&
@@ -262,6 +265,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
   if (type === "expense-category-totals") {
     const grouped = workspace.expenses
       .filter((expense) =>
+        expenseImpactsBalances(expense) &&
         inDateRange(expense.date, filters) &&
         (filters.projectId ? expense.projectId === filters.projectId : true) &&
         (filters.accountId ? expense.fundingAccountId === filters.accountId : true) &&
@@ -346,6 +350,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
     const rows = filterRowsBySearch(
       workspace.transfers
         .filter((transfer) =>
+          transferImpactsBalances(transfer) &&
           inDateRange(transfer.date, filters) &&
           (filters.projectId ? transfer.projectId === filters.projectId : true) &&
           (filters.status ? transfer.status === filters.status : true) &&
@@ -530,19 +535,22 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
 
     for (const donation of workspace.donations) {
       if (
+        donationImpactsBalances(donation) &&
         inDateRange(donation.date, filters) &&
         (!filters.projectId || donation.projectId === filters.projectId) &&
         (!filters.accountId || donation.accountId === filters.accountId) &&
         (!filters.donorId || donation.donorId === filters.donorId) &&
         (filters.currency === "All" || donation.originalCurrency === filters.currency)
       ) {
-        totals.donations.pkr += donation.pkrAmount;
-        totals.donations.usd += donation.usdAmount;
+        const sign = donation.status === "Refunded" ? -1 : 1;
+        totals.donations.pkr += donation.pkrAmount * sign;
+        totals.donations.usd += donation.usdAmount * sign;
       }
     }
 
     for (const expense of workspace.expenses) {
       if (
+        expenseImpactsBalances(expense) &&
         inDateRange(expense.date, filters) &&
         (!filters.projectId || expense.projectId === filters.projectId) &&
         (!filters.accountId || expense.fundingAccountId === filters.accountId) &&
@@ -558,6 +566,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
 
     for (const transfer of workspace.transfers) {
       if (
+        transferImpactsBalances(transfer) &&
         inDateRange(transfer.date, filters) &&
         (!filters.projectId || transfer.projectId === filters.projectId) &&
         (!filters.status || transfer.status === filters.status) &&
@@ -604,22 +613,24 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
   const grouped = {
     donations: workspace.donations.reduce<Record<string, { count: number; pkr: number; usd: number }>>((result, donation) => {
       if (
-        donation.status === "Received" &&
+        donationImpactsBalances(donation) &&
         inDateRange(donation.date, filters) &&
         (!filters.projectId || donation.projectId === filters.projectId) &&
         (!filters.donorId || donation.donorId === filters.donorId)
       ) {
         const key = yearKey(donation.date);
         const current = result[key] ?? { count: 0, pkr: 0, usd: 0 };
+        const sign = donation.status === "Refunded" ? -1 : 1;
         current.count += 1;
-        current.pkr += donation.pkrAmount;
-        current.usd += donation.usdAmount;
+        current.pkr += donation.pkrAmount * sign;
+        current.usd += donation.usdAmount * sign;
         result[key] = current;
       }
       return result;
     }, {}),
     expenses: workspace.expenses.reduce<Record<string, { count: number; pkr: number; usd: number }>>((result, expense) => {
       if (
+        expenseImpactsBalances(expense) &&
         inDateRange(expense.date, filters) &&
         (!filters.projectId || expense.projectId === filters.projectId) &&
         (!filters.category || expense.category === filters.category)
@@ -635,7 +646,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
       return result;
     }, {}),
     transfers: workspace.transfers.reduce<Record<string, { count: number; pkr: number; usd: number }>>((result, transfer) => {
-      if (inDateRange(transfer.date, filters) && (!filters.projectId || transfer.projectId === filters.projectId)) {
+      if (transferImpactsBalances(transfer) && inDateRange(transfer.date, filters) && (!filters.projectId || transfer.projectId === filters.projectId)) {
         const key = yearKey(transfer.date);
         const current = result[key] ?? { count: 0, pkr: 0, usd: 0 };
         current.count += 1;

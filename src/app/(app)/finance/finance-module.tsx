@@ -12,9 +12,11 @@ import {
   Landmark,
   Plus,
   Search,
+  ShieldAlert,
   Trash2,
   WalletCards,
 } from "lucide-react";
+import { FormNotice } from "@/components/data-display/form-notice";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { accountBalanceFromLedger, buildFinanceLedger, type FinanceLedgerEntry } from "@/lib/finance/ledger";
 import {
@@ -31,9 +33,11 @@ import {
   type FinanceBudget,
   type LocalExpense,
 } from "@/lib/finance/local-finance";
+import { expenseImpactsBalances, validatePositiveMoneyInput } from "@/lib/local-data/finance-rules";
+import { accountLinkCounts, deriveReconciliationChecks } from "@/lib/local-data/integrity";
 import { activeProjectOptions, projectLabel } from "@/lib/local-data/projects";
-import { loadLocalWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
-import type { LocalDonation, LocalProject, LocalTransfer, LocalWorkspace } from "@/lib/local-data/schema";
+import { loadLocalWorkspace, saveAuditedWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
+import type { LocalDonation, LocalFinancialRecord, LocalProject, LocalTransfer, LocalWorkspace } from "@/lib/local-data/schema";
 import { cn } from "@/lib/utils";
 
 type AccountFormState = {
@@ -80,6 +84,7 @@ export function FinanceModule() {
   const [expenses, setExpenses] = useState<LocalExpense[]>([]);
   const [donations, setDonations] = useState<LocalDonation[]>([]);
   const [transfers, setTransfers] = useState<LocalTransfer[]>([]);
+  const [financialRecords, setFinancialRecords] = useState<LocalFinancialRecord[]>([]);
   const [projects, setProjects] = useState<LocalProject[]>([]);
   const [accountSearch, setAccountSearch] = useState("");
   const [budgetSearch, setBudgetSearch] = useState("");
@@ -87,6 +92,7 @@ export function FinanceModule() {
   const [budgetForm, setBudgetForm] = useState<BudgetFormState>(emptyBudgetForm);
   const workspaceRef = useRef<LocalWorkspace | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [notice, setNotice] = useState<{ tone: "error" | "success"; message: string } | null>(null);
 
   useEffect(() => {
     const localWorkspace = loadLocalWorkspace();
@@ -96,6 +102,7 @@ export function FinanceModule() {
     setExpenses(localWorkspace.expenses);
     setDonations(localWorkspace.donations);
     setTransfers(localWorkspace.transfers);
+    setFinancialRecords(localWorkspace.financialRecords);
     setProjects(localWorkspace.projects);
     setBudgetForm((current) => ({
       ...current,
@@ -110,11 +117,43 @@ export function FinanceModule() {
     }
 
     if (workspaceRef.current) {
-      workspaceRef.current = saveLocalWorkspace({ ...workspaceRef.current, financeAccounts: accounts, financeBudgets: budgets, expenses, donations, transfers });
+      workspaceRef.current = saveLocalWorkspace({
+        ...workspaceRef.current,
+        financeAccounts: accounts,
+        financeBudgets: budgets,
+        expenses,
+        donations,
+        transfers,
+        financialRecords,
+      });
     }
-  }, [accounts, budgets, donations, expenses, hydrated, transfers]);
+  }, [accounts, budgets, donations, expenses, financialRecords, hydrated, transfers]);
 
-  const ledgerEntries = useMemo(() => buildFinanceLedger({ financeAccounts: accounts, expenses, donations, transfers }), [accounts, donations, expenses, transfers]);
+  const ledgerEntries = useMemo(
+    () => buildFinanceLedger({ financeAccounts: accounts, expenses, donations, transfers, financialRecords }),
+    [accounts, donations, expenses, financialRecords, transfers],
+  );
+  const reconciliationChecks = useMemo(
+    () =>
+      deriveReconciliationChecks({
+        ...(workspaceRef.current ?? loadLocalWorkspace()),
+        financeAccounts: accounts,
+        financeBudgets: budgets,
+        expenses,
+        donations,
+        transfers,
+        financialRecords,
+        projects,
+      }),
+    [accounts, budgets, donations, expenses, financialRecords, projects, transfers],
+  );
+  const reconciliationSummary = useMemo(
+    () => ({
+      failed: reconciliationChecks.filter((check) => !check.ok),
+      passed: reconciliationChecks.filter((check) => check.ok).length,
+    }),
+    [reconciliationChecks],
+  );
 
   const accountRows = useMemo(() => {
     return accounts.map((account) => {
@@ -143,7 +182,7 @@ export function FinanceModule() {
       const spentNative = expenses
         .filter((expense) => {
           const sameProject = budget.projectId ? expense.projectId === budget.projectId : expense.project === budget.project;
-          return sameProject && expense.category === budget.category && expense.approvalStatus !== "Rejected";
+          return sameProject && expense.category === budget.category && expenseImpactsBalances(expense);
         })
         .reduce((sum, expense) => {
           const amounts = convertedExpenseAmounts(expense);
@@ -220,26 +259,68 @@ export function FinanceModule() {
 
   const availableProjects = activeProjectOptions(projects);
 
+  function saveFinanceWorkspace(
+    nextWorkspace: LocalWorkspace,
+    audit: { action: string; entityId: string; entityType: string; metadata: Record<string, unknown> },
+  ) {
+    const savedWorkspace = saveAuditedWorkspace(nextWorkspace, {
+      actor: "Local Demo User",
+      ...audit,
+    });
+    workspaceRef.current = savedWorkspace;
+    setAccounts(savedWorkspace.financeAccounts);
+    setBudgets(savedWorkspace.financeBudgets);
+    setExpenses(savedWorkspace.expenses);
+    setDonations(savedWorkspace.donations);
+    setTransfers(savedWorkspace.transfers);
+    setFinancialRecords(savedWorkspace.financialRecords);
+    setProjects(savedWorkspace.projects);
+    return savedWorkspace;
+  }
+
   function handleAddAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = accountForm.name.trim();
     if (!name) {
+      setNotice({ tone: "error", message: "Enter an account name before saving." });
       return;
     }
 
-    setAccounts((current) => [
-      ...current,
-      normalizeFinanceAccount({
-        id: `account-${Date.now()}`,
-        name,
-        kind: accountForm.kind,
-        currency: accountForm.currency,
-        institution: accountForm.institution.trim(),
-        purpose: accountForm.purpose.trim(),
-        openingBalance: Number(accountForm.openingBalance || 0),
-        status: "Active",
-      }),
-    ]);
+    const openingBalance = Number(accountForm.openingBalance || 0);
+    if (!Number.isFinite(openingBalance) || openingBalance < 0) {
+      setNotice({ tone: "error", message: "Opening balance must be zero or greater." });
+      return;
+    }
+
+    const nextAccount = normalizeFinanceAccount({
+      id: `account-${Date.now()}`,
+      name,
+      kind: accountForm.kind,
+      currency: accountForm.currency,
+      institution: accountForm.institution.trim(),
+      purpose: accountForm.purpose.trim(),
+      openingBalance,
+      status: "Active",
+    });
+    saveFinanceWorkspace(
+      {
+        ...(workspaceRef.current ?? loadLocalWorkspace()),
+        financeAccounts: [...accounts, nextAccount],
+        financeBudgets: budgets,
+        expenses,
+        donations,
+        transfers,
+        financialRecords,
+        projects,
+      },
+      {
+        action: "created",
+        entityId: nextAccount.id,
+        entityType: "account",
+        metadata: { currency: nextAccount.currency, kind: nextAccount.kind },
+      },
+    );
+    setNotice({ tone: "success", message: "Account added to the local finance workspace." });
     setAccountForm(emptyAccountForm);
   }
 
@@ -248,31 +329,121 @@ export function FinanceModule() {
     const name = budgetForm.name.trim();
     const selectedProject = projects.find((project) => project.id === budgetForm.projectId);
     if (!name || !selectedProject) {
+      setNotice({ tone: "error", message: "Choose a project and budget name before saving." });
       return;
     }
 
-    setBudgets((current) => [
-      ...current,
-      normalizeFinanceBudget({
-        id: `budget-${Date.now()}`,
-        name,
-        projectId: selectedProject.id,
-        project: selectedProject.name,
-        category: budgetForm.category,
-        period: budgetForm.period,
-        currency: budgetForm.currency,
-        amount: Number(budgetForm.amount || 0),
-        owner: budgetForm.owner.trim(),
-      }),
-    ]);
+    const amountError = validatePositiveMoneyInput(Number(budgetForm.amount), "Budget amount");
+    if (amountError) {
+      setNotice({ tone: "error", message: amountError });
+      return;
+    }
+
+    const nextBudget = normalizeFinanceBudget({
+      id: `budget-${Date.now()}`,
+      name,
+      projectId: selectedProject.id,
+      project: selectedProject.name,
+      category: budgetForm.category,
+      period: budgetForm.period,
+      currency: budgetForm.currency,
+      amount: Number(budgetForm.amount || 0),
+      owner: budgetForm.owner.trim(),
+    });
+    saveFinanceWorkspace(
+      {
+        ...(workspaceRef.current ?? loadLocalWorkspace()),
+        financeAccounts: accounts,
+        financeBudgets: [...budgets, nextBudget],
+        expenses,
+        donations,
+        transfers,
+        financialRecords,
+        projects,
+      },
+      {
+        action: "created",
+        entityId: nextBudget.id,
+        entityType: "budget",
+        metadata: { category: nextBudget.category, projectId: nextBudget.projectId },
+      },
+    );
+    setNotice({ tone: "success", message: "Budget added to the local finance workspace." });
     setBudgetForm({
       ...emptyBudgetForm,
       projectId: activeProjectOptions(projects)[0]?.id ?? "",
     });
   }
 
+  function removeAccount(accountId: string) {
+    if (!workspaceRef.current) {
+      return;
+    }
+
+    const linked = accountLinkCounts(workspaceRef.current, accountId);
+    const linkedTotal = Object.values(linked).reduce((sum, count) => sum + count, 0);
+    const account = accounts.find((item) => item.id === accountId);
+    if (!account) {
+      return;
+    }
+
+    if (linkedTotal > 0) {
+      setNotice({
+        tone: "error",
+        message: `${account.name} still has linked donations, expenses, transfers, or finance records and cannot be deleted.`,
+      });
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete ${account.name} from the local finance workspace?`);
+    if (!confirmed) {
+      return;
+    }
+
+    saveFinanceWorkspace(
+      {
+        ...workspaceRef.current,
+        financeAccounts: accounts.filter((item) => item.id !== accountId),
+      },
+      {
+        action: "deleted",
+        entityId: accountId,
+        entityType: "account",
+        metadata: {},
+      },
+    );
+    setNotice({ tone: "success", message: `${account.name} was removed.` });
+  }
+
+  function removeBudget(budgetId: string) {
+    if (!workspaceRef.current) {
+      return;
+    }
+
+    const budget = budgets.find((item) => item.id === budgetId);
+    if (!budget) {
+      return;
+    }
+
+    saveFinanceWorkspace(
+      {
+        ...workspaceRef.current,
+        financeBudgets: budgets.filter((item) => item.id !== budgetId),
+      },
+      {
+        action: "deleted",
+        entityId: budgetId,
+        entityType: "budget",
+        metadata: { projectId: budget.projectId },
+      },
+    );
+    setNotice({ tone: "success", message: `${budget.name} was removed.` });
+  }
+
   return (
     <div className="space-y-6">
+      {notice ? <FormNotice message={notice.message} tone={notice.tone} /> : null}
+
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard icon={Landmark} label="Bank balance" value={`${formatMoney(summary.PKR, "PKR")} / ${formatMoney(summary.USD, "USD")}`} />
         <SummaryCard icon={WalletCards} label="Bank accounts" value={String(summary.bankAccounts)} detail="Automatic balances enabled" />
@@ -295,8 +466,8 @@ export function FinanceModule() {
           </div>
 
           <div className="grid gap-4 p-5 lg:grid-cols-2">
-            <AccountGroup title="Bank Accounts" accounts={filteredAccounts.filter((account) => account.kind === "Bank")} onDelete={setAccounts} />
-            <AccountGroup title="Cash Accounts" accounts={filteredAccounts.filter((account) => account.kind === "Cash")} onDelete={setAccounts} />
+            <AccountGroup title="Bank Accounts" accounts={filteredAccounts.filter((account) => account.kind === "Bank")} onDelete={removeAccount} />
+            <AccountGroup title="Cash Accounts" accounts={filteredAccounts.filter((account) => account.kind === "Cash")} onDelete={removeAccount} />
           </div>
         </div>
 
@@ -403,7 +574,7 @@ export function FinanceModule() {
                     <td className="px-5 py-4 text-right">
                       <button
                         className="inline-flex size-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-red-50 hover:text-red-700"
-                        onClick={() => setBudgets((current) => current.filter((item) => item.id !== budget.id))}
+                        onClick={() => removeBudget(budget.id)}
                         type="button"
                         aria-label={`Delete ${budget.name}`}
                       >
@@ -486,6 +657,31 @@ export function FinanceModule() {
           ))}
         </div>
       </section>
+
+      <section className="rounded-lg border border-emerald-100 bg-white p-5 shadow-sm shadow-emerald-950/5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight text-slate-950">Reconciliation checks</h2>
+            <p className="mt-1 text-sm text-slate-500">Accounts, transfers, donations, expenses, and ledger totals must agree before release.</p>
+          </div>
+          <StatusBadge value={reconciliationSummary.failed.length ? "Review" : "Ready"} />
+        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
+          {reconciliationChecks.map((check) => (
+            <article key={check.id} className="rounded-lg border border-slate-100 p-4">
+              <div className="flex items-start gap-3">
+                <div className={cn("mt-0.5 flex size-8 items-center justify-center rounded-md", check.ok ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
+                  {check.ok ? <Landmark className="size-4" aria-hidden="true" /> : <ShieldAlert className="size-4" aria-hidden="true" />}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold text-slate-950">{check.label}</p>
+                  <p className="mt-1 text-sm text-slate-500">{check.detail}</p>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
@@ -497,7 +693,7 @@ function AccountGroup({
 }: {
   title: string;
   accounts: Array<FinanceAccount & { movementTotal: number; balance: number; movementCount: number }>;
-  onDelete: React.Dispatch<React.SetStateAction<FinanceAccount[]>>;
+  onDelete: (accountId: string) => void;
 }) {
   const Icon = title.startsWith("Bank") ? Building2 : Banknote;
 
@@ -526,7 +722,7 @@ function AccountGroup({
             <span>{account.movementCount} linked movements</span>
             <button
               className="inline-flex size-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-red-50 hover:text-red-700"
-              onClick={() => onDelete((current) => current.filter((item) => item.id !== account.id))}
+              onClick={() => onDelete(account.id)}
               type="button"
               aria-label={`Delete ${account.name}`}
             >

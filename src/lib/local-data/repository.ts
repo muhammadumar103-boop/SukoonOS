@@ -14,6 +14,7 @@ import {
 import { localWorkspaceSchema } from "@/lib/local-data/validation";
 
 type BrowserStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+export const maxLocalWorkspaceImportBytes = 2 * 1024 * 1024;
 
 function safeParse(value: string | null) {
   if (!value) {
@@ -64,9 +65,13 @@ function syncLegacyCollections(storage: BrowserStorage, workspace: LocalWorkspac
 function workspaceCounts(workspace: LocalWorkspace) {
   return {
     accounts: workspace.financeAccounts.length,
+    approvals: workspace.approvals.length,
     budgets: workspace.financeBudgets.length,
+    financialRecords: workspace.financialRecords.length,
+    projects: workspace.projects.length,
     expenses: workspace.expenses.length,
     donations: workspace.donations.length,
+    tasks: workspace.tasks.length,
     transfers: workspace.transfers.length,
     donors: workspace.donors.length,
   };
@@ -96,6 +101,14 @@ export function appendAuditLogEntry(
       ...workspace.auditLog,
     ].slice(0, 200),
   };
+}
+
+export function saveAuditedWorkspace(
+  workspace: LocalWorkspace,
+  entry: Omit<LocalAuditLogEntry, "id" | "createdAt">,
+  storage: BrowserStorage | null = browserStorage(),
+) {
+  return saveLocalWorkspace(appendAuditLogEntry(workspace, entry), storage);
 }
 
 export function loadLocalWorkspace(storage: BrowserStorage | null = browserStorage()): LocalWorkspace {
@@ -161,6 +174,10 @@ export function exportLocalWorkspace(storage: BrowserStorage | null = browserSto
 }
 
 export function importLocalWorkspace(input: string, storage: BrowserStorage | null = browserStorage()) {
+  if (new Blob([input]).size > maxLocalWorkspaceImportBytes) {
+    throw new Error(`Workspace imports must be smaller than ${Math.round(maxLocalWorkspaceImportBytes / 1024 / 1024)} MB.`);
+  }
+
   createWorkspaceBackup("import", storage);
   const parsed = JSON.parse(input) as unknown;
   const validated = validateWorkspace(migrateLocalWorkspace(parsed));

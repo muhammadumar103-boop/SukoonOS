@@ -2,12 +2,14 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Download, Pencil, Search, Trash2 } from "lucide-react";
+import { FormNotice } from "@/components/data-display/form-notice";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { defaultUsdToPkrRate, formatMoney, type Currency, type FinanceAccount } from "@/lib/finance/local-finance";
 import { donorLabel } from "@/lib/local-data/donors";
+import { donationImpactsBalances, validateExchangeRateInput, validatePositiveMoneyInput } from "@/lib/local-data/finance-rules";
 import { activeProjectOptions, projectLabel } from "@/lib/local-data/projects";
 import { moneyValues } from "@/lib/local-data/migrations";
-import { loadLocalWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
+import { loadLocalWorkspace, saveAuditedWorkspace } from "@/lib/local-data/repository";
 import type { LocalDonation, LocalDonor, LocalProject, LocalWorkspace } from "@/lib/local-data/schema";
 import { cn } from "@/lib/utils";
 
@@ -87,7 +89,7 @@ export function LocalDonationsManager() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | DonationStatus>("All");
   const [projectFilter, setProjectFilter] = useState("All");
-  const [hydrated, setHydrated] = useState(false);
+  const [notice, setNotice] = useState<{ tone: "error" | "success"; message: string } | null>(null);
 
   useEffect(() => {
     const workspace = loadLocalWorkspace();
@@ -104,16 +106,7 @@ export function LocalDonationsManager() {
       projectId: defaultProject?.id ?? current.projectId,
       accountId: workspace.financeAccounts.find((account) => account.currency === current.originalCurrency)?.id ?? current.accountId,
     }));
-    setHydrated(true);
   }, []);
-
-  useEffect(() => {
-    if (!hydrated || !workspaceRef.current) {
-      return;
-    }
-
-    workspaceRef.current = saveLocalWorkspace({ ...workspaceRef.current, donations });
-  }, [donations, hydrated]);
 
   const filteredDonations = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -145,15 +138,41 @@ export function LocalDonationsManager() {
   const totals = useMemo(() => {
     return filteredDonations.reduce(
       (result, donation) => {
-        if (donation.status === "Received") {
-          result.PKR += donation.pkrAmount;
-          result.USD += donation.usdAmount;
+        if (!donationImpactsBalances(donation)) {
+          return result;
         }
+
+        const sign = donation.status === "Refunded" ? -1 : 1;
+        result.PKR += donation.pkrAmount * sign;
+        result.USD += donation.usdAmount * sign;
         return result;
       },
       { PKR: 0, USD: 0 },
     );
   }, [filteredDonations]);
+
+  function persistDonations(
+    nextDonations: LocalDonation[],
+    audit: { action: string; entityId: string; metadata: Record<string, unknown> },
+  ) {
+    if (!workspaceRef.current) {
+      return;
+    }
+
+    const savedWorkspace = saveAuditedWorkspace(
+      { ...workspaceRef.current, donations: nextDonations },
+      {
+        entityType: "donation",
+        actor: "Local Demo User",
+        entityId: audit.entityId,
+        action: audit.action,
+        metadata: audit.metadata,
+      },
+    );
+
+    workspaceRef.current = savedWorkspace;
+    setDonations(savedWorkspace.donations);
+  }
 
   function updateForm<Key extends keyof DonationForm>(key: Key, value: DonationForm[Key]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -186,6 +205,19 @@ export function LocalDonationsManager() {
     const donorName = selectedDonor?.fullName ?? form.legacyDonorName.trim();
     const selectedProject = projects.find((project) => project.id === form.projectId);
     if (!donorId || !donorName || !selectedProject) {
+      setNotice({ tone: "error", message: "Select a donor and project before saving a donation." });
+      return;
+    }
+
+    const amountError = validatePositiveMoneyInput(Number(form.originalAmount));
+    if (amountError) {
+      setNotice({ tone: "error", message: amountError });
+      return;
+    }
+
+    const exchangeRateError = validateExchangeRateInput(Number(form.exchangeRate));
+    if (exchangeRateError) {
+      setNotice({ tone: "error", message: exchangeRateError });
       return;
     }
 
@@ -204,8 +236,49 @@ export function LocalDonationsManager() {
       ...moneyValues(Number(form.originalAmount), form.originalCurrency, Number(form.exchangeRate)),
     };
 
-    setDonations((current) => (editingId ? current.map((donation) => (donation.id === editingId ? nextDonation : donation)) : [nextDonation, ...current]));
+    const nextDonations = editingId
+      ? donations.map((donation) => (donation.id === editingId ? nextDonation : donation))
+      : [nextDonation, ...donations];
+    persistDonations(nextDonations, {
+      action: editingId ? "updated" : "created",
+      entityId: nextDonation.id,
+      metadata: {
+        accountId: nextDonation.accountId,
+        donorId: nextDonation.donorId,
+        projectId: nextDonation.projectId,
+        status: nextDonation.status,
+      },
+    });
+    setNotice({
+      tone: "success",
+      message: editingId ? "Donation updated in the local workspace." : "Donation saved to the local workspace.",
+    });
     resetForm();
+  }
+
+  function removeDonation(donation: LocalDonation) {
+    const nextStatus = donation.status === "Received" ? "Refunded" : "Cancelled";
+    const actionLabel = nextStatus === "Refunded" ? "mark as refunded" : "cancel";
+    const confirmed = window.confirm(`This will ${actionLabel} the donation instead of deleting it. Continue?`);
+    if (!confirmed) {
+      return;
+    }
+
+    persistDonations(
+      donations.map((item) => (item.id === donation.id ? { ...item, status: nextStatus } : item)),
+      {
+        action: nextStatus === "Refunded" ? "voided" : "cancelled",
+        entityId: donation.id,
+        metadata: { previousStatus: donation.status, donorId: donation.donorId, projectId: donation.projectId },
+      },
+    );
+    setNotice({
+      tone: "success",
+      message: nextStatus === "Refunded" ? "Donation was marked as refunded." : "Donation was cancelled in the local workspace.",
+    });
+    if (editingId === donation.id) {
+      resetForm();
+    }
   }
 
   function exportCsv() {
@@ -261,6 +334,7 @@ export function LocalDonationsManager() {
       <section className="rounded-lg border border-emerald-100 bg-white p-5 shadow-sm shadow-emerald-950/5">
         <h2 className="text-lg font-semibold text-slate-950">{editingId ? "Edit donation" : "Record donation"}</h2>
         <p className="mt-1 text-sm text-slate-500">Saved locally in demo mode and reflected in the Finance Ledger.</p>
+        {notice ? <div className="mt-4"><FormNotice message={notice.message} tone={notice.tone} /></div> : null}
 
         <form className="mt-5 grid gap-4 lg:grid-cols-4" onSubmit={handleSubmit}>
           <Field label="Date">
@@ -434,9 +508,9 @@ export function LocalDonationsManager() {
                         <Pencil className="size-4" aria-hidden="true" />
                         <span className="sr-only">Edit donation</span>
                       </button>
-                      <button className="grid size-9 place-items-center rounded-md border border-red-100 text-red-600 transition hover:bg-red-50" onClick={() => setDonations((current) => current.filter((item) => item.id !== donation.id))} type="button">
+                      <button className="grid size-9 place-items-center rounded-md border border-red-100 text-red-600 transition hover:bg-red-50" onClick={() => removeDonation(donation)} type="button">
                         <Trash2 className="size-4" aria-hidden="true" />
-                        <span className="sr-only">Delete donation</span>
+                        <span className="sr-only">Cancel or refund donation</span>
                       </button>
                     </div>
                   </td>

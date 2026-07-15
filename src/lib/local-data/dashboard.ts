@@ -1,6 +1,7 @@
 import { buildFinanceLedger } from "@/lib/finance/ledger";
 import { convertedExpenseAmounts, formatMoney } from "@/lib/finance/local-finance";
 import { deriveDonorRows } from "@/lib/local-data/donors";
+import { donationImpactsBalances, expenseImpactsBalances } from "@/lib/local-data/finance-rules";
 import { deriveProjectRows } from "@/lib/local-data/projects";
 import { deriveApprovalRows, deriveTaskRows } from "@/lib/local-data/workflows";
 import type { LocalWorkspace } from "@/lib/local-data/schema";
@@ -39,8 +40,8 @@ export function deriveDashboardData(workspace: LocalWorkspace) {
   const activeProjects = projectRows.filter((project) => !project.archivedAt && !["Completed", "Paused"].includes(project.status));
   const currentMonth = currentMonthKey();
 
-  const receivedDonations = workspace.donations.filter((donation) => donation.status === "Received");
-  const approvedExpenses = workspace.expenses.filter((expense) => expense.approvalStatus === "Approved" || expense.approvalStatus === "Paid");
+  const receivedDonations = workspace.donations.filter(donationImpactsBalances);
+  const approvedExpenses = workspace.expenses.filter(expenseImpactsBalances);
   const thisMonthDonations = receivedDonations.filter((donation) => donation.date.startsWith(currentMonth));
   const thisMonthExpenses = approvedExpenses.filter((expense) => expense.date.startsWith(currentMonth));
   const overdueDonors = donorRows.filter((donor) => donor.effectiveReminderStatus === "Overdue");
@@ -83,8 +84,9 @@ export function deriveDashboardData(workspace: LocalWorkspace) {
 
   const totalDonations = receivedDonations.reduce(
     (result, donation) => {
-      result.PKR += donation.pkrAmount;
-      result.USD += donation.usdAmount;
+      const sign = donation.status === "Refunded" ? -1 : 1;
+      result.PKR += donation.pkrAmount * sign;
+      result.USD += donation.usdAmount * sign;
       return result;
     },
     { PKR: 0, USD: 0 },
@@ -102,8 +104,9 @@ export function deriveDashboardData(workspace: LocalWorkspace) {
 
   const thisMonthDonationTotals = thisMonthDonations.reduce(
     (result, donation) => {
-      result.PKR += donation.pkrAmount;
-      result.USD += donation.usdAmount;
+      const sign = donation.status === "Refunded" ? -1 : 1;
+      result.PKR += donation.pkrAmount * sign;
+      result.USD += donation.usdAmount * sign;
       return result;
     },
     { PKR: 0, USD: 0 },
@@ -134,8 +137,9 @@ export function deriveDashboardData(workspace: LocalWorkspace) {
   for (const donation of receivedDonations) {
     const bucket = monthBuckets.find((item) => item.key === donation.date.slice(0, 7));
     if (bucket) {
-      bucket.usd += donation.usdAmount;
-      bucket.pkr += donation.pkrAmount;
+      const sign = donation.status === "Refunded" ? -1 : 1;
+      bucket.usd += donation.usdAmount * sign;
+      bucket.pkr += donation.pkrAmount * sign;
     }
   }
 

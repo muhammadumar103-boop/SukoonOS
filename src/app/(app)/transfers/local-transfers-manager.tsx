@@ -2,17 +2,19 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Download, Pencil, Search, Trash2 } from "lucide-react";
+import { FormNotice } from "@/components/data-display/form-notice";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { defaultUsdToPkrRate, formatMoney, type Currency, type FinanceAccount } from "@/lib/finance/local-finance";
+import { transferImpactsBalances, validateExchangeRateInput, validatePositiveMoneyInput } from "@/lib/local-data/finance-rules";
 import { activeProjectOptions, projectLabel } from "@/lib/local-data/projects";
 import { moneyValues } from "@/lib/local-data/migrations";
-import { loadLocalWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
+import { loadLocalWorkspace, saveAuditedWorkspace } from "@/lib/local-data/repository";
 import type { LocalProject, LocalTransfer, LocalWorkspace } from "@/lib/local-data/schema";
 import { cn } from "@/lib/utils";
 
 type TransferStatus = LocalTransfer["status"];
 
-const transferStatuses: TransferStatus[] = ["Draft", "Review", "Scheduled", "Completed", "Cancelled"];
+const transferStatuses: TransferStatus[] = ["Draft", "Review", "Scheduled", "Completed", "Cancelled", "Voided"];
 
 type TransferForm = {
   fromAccountId: string;
@@ -78,7 +80,7 @@ export function LocalTransfersManager() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | TransferStatus>("All");
   const [projectFilter, setProjectFilter] = useState("All");
-  const [hydrated, setHydrated] = useState(false);
+  const [notice, setNotice] = useState<{ tone: "error" | "success"; message: string } | null>(null);
 
   useEffect(() => {
     const workspace = loadLocalWorkspace();
@@ -93,16 +95,7 @@ export function LocalTransfersManager() {
       toAccountId: workspace.financeAccounts[1]?.id ?? current.toAccountId,
       projectId: defaultProject?.id ?? current.projectId,
     }));
-    setHydrated(true);
   }, []);
-
-  useEffect(() => {
-    if (!hydrated || !workspaceRef.current) {
-      return;
-    }
-
-    workspaceRef.current = saveLocalWorkspace({ ...workspaceRef.current, transfers });
-  }, [hydrated, transfers]);
 
   const filteredTransfers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -124,7 +117,7 @@ export function LocalTransfersManager() {
   const totals = useMemo(() => {
     return filteredTransfers.reduce(
       (result, transfer) => {
-        if (transfer.status !== "Cancelled" && transfer.status !== "Draft") {
+        if (transferImpactsBalances(transfer)) {
           result.PKR += transfer.pkrAmount;
           result.USD += transfer.usdAmount;
         }
@@ -133,6 +126,29 @@ export function LocalTransfersManager() {
       { PKR: 0, USD: 0 },
     );
   }, [filteredTransfers]);
+
+  function persistTransfers(
+    nextTransfers: LocalTransfer[],
+    audit: { action: string; entityId: string; metadata: Record<string, unknown> },
+  ) {
+    if (!workspaceRef.current) {
+      return;
+    }
+
+    const savedWorkspace = saveAuditedWorkspace(
+      { ...workspaceRef.current, transfers: nextTransfers },
+      {
+        entityType: "transfer",
+        actor: "Local Demo User",
+        entityId: audit.entityId,
+        action: audit.action,
+        metadata: audit.metadata,
+      },
+    );
+
+    workspaceRef.current = savedWorkspace;
+    setTransfers(savedWorkspace.transfers);
+  }
 
   function updateForm<Key extends keyof TransferForm>(key: Key, value: TransferForm[Key]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -154,6 +170,19 @@ export function LocalTransfersManager() {
     const selectedProject = projects.find((project) => project.id === form.projectId);
 
     if (!form.fromAccountId || !form.toAccountId || form.fromAccountId === form.toAccountId || !selectedProject) {
+      setNotice({ tone: "error", message: "Choose two different accounts and a project before saving a transfer." });
+      return;
+    }
+
+    const amountError = validatePositiveMoneyInput(Number(form.originalAmount));
+    if (amountError) {
+      setNotice({ tone: "error", message: amountError });
+      return;
+    }
+
+    const exchangeRateError = validateExchangeRateInput(Number(form.exchangeRate));
+    if (exchangeRateError) {
+      setNotice({ tone: "error", message: exchangeRateError });
       return;
     }
 
@@ -170,8 +199,52 @@ export function LocalTransfersManager() {
       ...moneyValues(Number(form.originalAmount), form.originalCurrency, Number(form.exchangeRate)),
     };
 
-    setTransfers((current) => (editingId ? current.map((transfer) => (transfer.id === editingId ? nextTransfer : transfer)) : [nextTransfer, ...current]));
+    const nextTransfers = editingId
+      ? transfers.map((transfer) => (transfer.id === editingId ? nextTransfer : transfer))
+      : [nextTransfer, ...transfers];
+    persistTransfers(nextTransfers, {
+      action: editingId ? "updated" : "created",
+      entityId: nextTransfer.id,
+      metadata: {
+        fromAccountId: nextTransfer.fromAccountId,
+        projectId: nextTransfer.projectId,
+        status: nextTransfer.status,
+        toAccountId: nextTransfer.toAccountId,
+      },
+    });
+    setNotice({
+      tone: "success",
+      message: editingId ? "Transfer updated in the local workspace." : "Transfer saved to the local workspace.",
+    });
     resetForm();
+  }
+
+  function removeTransfer(transfer: LocalTransfer) {
+    const nextStatus: TransferStatus = transferImpactsBalances(transfer) ? "Voided" : "Cancelled";
+    const confirmed = window.confirm(
+      nextStatus === "Voided"
+        ? "This completed transfer affects balances. Void it instead of deleting it?"
+        : "Cancel this transfer in the local workspace?",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    persistTransfers(
+      transfers.map((item) => (item.id === transfer.id ? { ...item, status: nextStatus } : item)),
+      {
+        action: nextStatus === "Voided" ? "voided" : "cancelled",
+        entityId: transfer.id,
+        metadata: { previousStatus: transfer.status, projectId: transfer.projectId },
+      },
+    );
+    setNotice({
+      tone: "success",
+      message: nextStatus === "Voided" ? "Transfer was voided and preserved for audit." : "Transfer was cancelled in the local workspace.",
+    });
+    if (editingId === transfer.id) {
+      resetForm();
+    }
   }
 
   function exportCsv() {
@@ -215,6 +288,7 @@ export function LocalTransfersManager() {
       <section className="rounded-lg border border-emerald-100 bg-white p-5 shadow-sm shadow-emerald-950/5">
         <h2 className="text-lg font-semibold text-slate-950">{editingId ? "Edit transfer" : "New transfer"}</h2>
         <p className="mt-1 text-sm text-slate-500">Transfers update account balances but do not count as income or expenses.</p>
+        {notice ? <div className="mt-4"><FormNotice message={notice.message} tone={notice.tone} /></div> : null}
 
         <form className="mt-5 grid gap-4 lg:grid-cols-4" onSubmit={handleSubmit}>
           <Field label="Date">
@@ -365,9 +439,9 @@ export function LocalTransfersManager() {
                     <Pencil className="size-4" aria-hidden="true" />
                     <span className="sr-only">Edit transfer</span>
                   </button>
-                  <button className="grid size-9 place-items-center rounded-md border border-red-100 text-red-600 transition hover:bg-red-50" onClick={() => setTransfers((current) => current.filter((item) => item.id !== transfer.id))} type="button">
+                  <button className="grid size-9 place-items-center rounded-md border border-red-100 text-red-600 transition hover:bg-red-50" onClick={() => removeTransfer(transfer)} type="button">
                     <Trash2 className="size-4" aria-hidden="true" />
-                    <span className="sr-only">Delete transfer</span>
+                    <span className="sr-only">Cancel or void transfer</span>
                   </button>
                 </div>
               </article>

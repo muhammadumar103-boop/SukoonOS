@@ -22,12 +22,20 @@ import {
   type LegacyLocalWorkspaceInput,
   type LocalDonation,
   type LocalDonor,
+  type LocalFinancialRecord,
   type LocalProject,
   type LocalTask,
   type LocalTransfer,
   type LocalWorkspace,
 } from "@/lib/local-data/schema";
-import { sampleLocalApprovals, sampleLocalDonations, sampleLocalDonors, sampleLocalTasks, sampleLocalTransfers } from "@/lib/local-data/seeds";
+import {
+  sampleLocalApprovals,
+  sampleLocalDonations,
+  sampleLocalDonors,
+  sampleLocalFinancialRecords,
+  sampleLocalTasks,
+  sampleLocalTransfers,
+} from "@/lib/local-data/seeds";
 
 type LegacyCollections = {
   expenses?: unknown[];
@@ -128,6 +136,38 @@ function normalizeTransfers(transfers: unknown[] | undefined, projects: LocalPro
     : [];
 }
 
+function normalizeFinancialRecords(records: unknown[] | undefined, projects: LocalProject[]): LocalFinancialRecord[] {
+  return Array.isArray(records)
+    ? records.map((record) => {
+        const candidate = record as Partial<LocalFinancialRecord>;
+        const projectReference = resolveProjectReference(projects, candidate);
+
+        return {
+          id: candidate.id ?? `financial-record-${Date.now()}`,
+          type: candidate.type === "Refund" || candidate.type === "Fee" || candidate.type === "Adjustment" ? candidate.type : "Adjustment",
+          accountId: candidate.accountId ?? "operations-bank-pkr",
+          projectId: projectReference.projectId,
+          project: projectReference.project,
+          date: candidate.date ?? new Date().toISOString().slice(0, 10),
+          status:
+            candidate.status === "Draft" ||
+            candidate.status === "Pending" ||
+            candidate.status === "Approved" ||
+            candidate.status === "Posted" ||
+            candidate.status === "Voided"
+              ? candidate.status
+              : "Draft",
+          description: candidate.description?.trim() || "",
+          party: candidate.party?.trim() || "",
+          method: candidate.method?.trim() || (candidate.type === "Adjustment" ? "Adjustment" : "Bank Transfer"),
+          reference: candidate.reference?.trim() || "",
+          notes: candidate.notes?.trim() || "",
+          ...moneyValues(Number(candidate.originalAmount ?? 0), candidate.originalCurrency ?? "USD", Number(candidate.exchangeRate ?? 278)),
+        };
+      })
+    : [];
+}
+
 function normalizeDonors(donors: unknown[] | undefined): LocalDonor[] {
   return Array.isArray(donors) ? (donors as LocalDonor[]) : [];
 }
@@ -209,6 +249,7 @@ export function createEmptyWorkspace(): LocalWorkspace {
     expenses: [],
     donations: [],
     transfers: [],
+    financialRecords: [],
     projects: [],
     donors: [],
     tasks: [],
@@ -242,6 +283,7 @@ export function createSampleWorkspace(legacy: LegacyCollections = {}): LocalWork
     expenses: normalizeExpenses(legacy.expenses, projects),
     donations: normalizeDonations(sampleLocalDonations, projects, donors),
     transfers: normalizeTransfers(sampleLocalTransfers, projects),
+    financialRecords: normalizeFinancialRecords(sampleLocalFinancialRecords, projects),
     projects,
     donors,
     tasks: normalizeTasks(sampleLocalTasks),
@@ -258,6 +300,8 @@ export function migrateLocalWorkspace(input: unknown, legacy: LegacyCollections 
   const sampleDataEnabled = Boolean(candidate.sampleDataEnabled);
   const existingDonations = candidate.donations?.length ? candidate.donations : sampleDataEnabled ? sampleLocalDonations : [];
   const existingTransfers = candidate.transfers?.length ? candidate.transfers : sampleDataEnabled ? sampleLocalTransfers : [];
+  const existingFinancialRecords =
+    candidate.financialRecords?.length ? candidate.financialRecords : sampleDataEnabled ? sampleLocalFinancialRecords : [];
   const donors = normalizeDonors(candidate.donors?.length ? candidate.donors : sampleDataEnabled ? sampleLocalDonors : []);
   const projects = normalizeProjects(candidate.projects, collectLegacyProjectNames(candidate, legacy, sampleDataEnabled), sampleDataEnabled);
 
@@ -271,6 +315,7 @@ export function migrateLocalWorkspace(input: unknown, legacy: LegacyCollections 
     expenses: normalizeExpenses(existingExpenses, projects),
     donations: normalizeDonations(existingDonations, projects, donors),
     transfers: normalizeTransfers(existingTransfers, projects),
+    financialRecords: normalizeFinancialRecords(existingFinancialRecords, projects),
     projects,
     donors,
     tasks: normalizeTasks(candidate.tasks?.length ? candidate.tasks : sampleDataEnabled ? sampleLocalTasks : []),

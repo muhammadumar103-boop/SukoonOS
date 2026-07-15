@@ -3,16 +3,18 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Archive, ArchiveRestore, Pencil, Search, Trash2 } from "lucide-react";
 import { z } from "zod";
+import { FormNotice } from "@/components/data-display/form-notice";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { buildFinanceLedger } from "@/lib/finance/ledger";
 import { formatMoney } from "@/lib/finance/local-finance";
+import { projectLinkCounts } from "@/lib/local-data/integrity";
 import {
   deriveProjectRows,
   projectStatuses,
   projectTypes,
   type DerivedProjectRow,
 } from "@/lib/local-data/projects";
-import { appendAuditLogEntry, loadLocalWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
+import { loadLocalWorkspace, saveAuditedWorkspace } from "@/lib/local-data/repository";
 import type { LocalProject, LocalWorkspace } from "@/lib/local-data/schema";
 import { cn } from "@/lib/utils";
 
@@ -165,6 +167,7 @@ export function LocalProjectsManager() {
   const [typeFilter, setTypeFilter] = useState<"All" | string>("All");
   const [viewFilter, setViewFilter] = useState<"Active" | "Archived" | "All">("Active");
   const [errors, setErrors] = useState<Partial<Record<keyof ProjectForm, string>>>({});
+  const [notice, setNotice] = useState<{ tone: "error" | "success"; message: string } | null>(null);
 
   useEffect(() => {
     const loadedWorkspace = loadLocalWorkspace();
@@ -229,14 +232,13 @@ export function LocalProjectsManager() {
     nextWorkspace: LocalWorkspace,
     audit: { action: string; entityId: string; metadata: Record<string, unknown> },
   ) {
-    const auditedWorkspace = appendAuditLogEntry(nextWorkspace, {
+    const savedWorkspace = saveAuditedWorkspace(nextWorkspace, {
       entityType: "project",
       entityId: audit.entityId,
       action: audit.action,
       actor: "Local Demo User",
       metadata: audit.metadata,
     });
-    const savedWorkspace = saveLocalWorkspace(auditedWorkspace);
     workspaceRef.current = savedWorkspace;
     setWorkspace(savedWorkspace);
     return savedWorkspace;
@@ -253,12 +255,7 @@ export function LocalProjectsManager() {
   }
 
   function linkedCounts(project: LocalProject, currentWorkspace: LocalWorkspace) {
-    return {
-      budgets: currentWorkspace.financeBudgets.filter((budget) => budget.projectId === project.id).length,
-      donations: currentWorkspace.donations.filter((donation) => donation.projectId === project.id).length,
-      expenses: currentWorkspace.expenses.filter((expense) => expense.projectId === project.id).length,
-      transfers: currentWorkspace.transfers.filter((transfer) => transfer.projectId === project.id).length,
-    };
+    return projectLinkCounts(currentWorkspace, project.id);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -332,6 +329,7 @@ export function LocalProjectsManager() {
 
     setSelectedProjectId(nextProject.id);
     workspaceRef.current = saved;
+    setNotice({ tone: "success", message: editingId ? "Project updated in the local workspace." : "Project created in the local workspace." });
     resetForm();
   }
 
@@ -376,6 +374,7 @@ export function LocalProjectsManager() {
         },
       },
     );
+    setNotice({ tone: "success", message: project.archivedAt ? "Project restored to the active workspace." : "Project archived from the active workspace." });
   }
 
   function deleteProject(project: LocalProject) {
@@ -384,9 +383,16 @@ export function LocalProjectsManager() {
     }
 
     const counts = linkedCounts(project, workspaceRef.current);
-    const confirmed = window.confirm(
-      `Delete "${project.name}" from this browser workspace?\n\nLinked records will keep the project name text as a legacy fallback, but the live project link will be removed.\n\nExpenses: ${counts.expenses}, Donations: ${counts.donations}, Transfers: ${counts.transfers}, Budgets: ${counts.budgets}`,
-    );
+    const linkedTotal = Object.values(counts).reduce((sum, count) => sum + count, 0);
+    if (linkedTotal > 0) {
+      setNotice({
+        tone: "error",
+        message: `${project.name} still has linked budgets, finance records, tasks, approvals, or transactions and cannot be deleted until those links are reassigned.`,
+      });
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete "${project.name}" from this browser workspace?`);
     if (!confirmed) {
       return;
     }
@@ -394,18 +400,6 @@ export function LocalProjectsManager() {
     const nextWorkspace: LocalWorkspace = {
       ...workspaceRef.current,
       projects: workspaceRef.current.projects.filter((item) => item.id !== project.id),
-      expenses: workspaceRef.current.expenses.map((expense) =>
-        expense.projectId === project.id ? { ...expense, projectId: "", project: project.name } : expense,
-      ),
-      donations: workspaceRef.current.donations.map((donation) =>
-        donation.projectId === project.id ? { ...donation, projectId: "", project: project.name } : donation,
-      ),
-      transfers: workspaceRef.current.transfers.map((transfer) =>
-        transfer.projectId === project.id ? { ...transfer, projectId: "", project: project.name } : transfer,
-      ),
-      financeBudgets: workspaceRef.current.financeBudgets.map((budget) =>
-        budget.projectId === project.id ? { ...budget, projectId: "", project: project.name } : budget,
-      ),
     };
 
     saveWorkspace(nextWorkspace, {
@@ -419,6 +413,7 @@ export function LocalProjectsManager() {
         linkedTransfers: counts.transfers,
       },
     });
+    setNotice({ tone: "success", message: `${project.name} was removed from the local workspace.` });
 
     if (editingId === project.id) {
       resetForm();
@@ -429,6 +424,7 @@ export function LocalProjectsManager() {
 
   return (
     <div className="space-y-6">
+      {notice ? <FormNotice message={notice.message} tone={notice.tone} /> : null}
       <section className="grid gap-4 xl:grid-cols-[420px_1fr]">
         <form className="rounded-lg border border-emerald-100 bg-white p-5 shadow-sm shadow-emerald-950/5" onSubmit={handleSubmit}>
           <h2 className="text-lg font-semibold text-slate-950">{editingId ? "Edit project" : "Create project"}</h2>

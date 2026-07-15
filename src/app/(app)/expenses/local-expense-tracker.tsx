@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Pencil, Search, Trash2 } from "lucide-react";
+import { FormNotice } from "@/components/data-display/form-notice";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import {
   approvalStatuses,
@@ -22,8 +23,9 @@ import {
   type FinanceAccount,
   type LocalExpense,
 } from "@/lib/finance/local-finance";
+import { expenseImpactsBalances, validateExchangeRateInput, validatePositiveMoneyInput } from "@/lib/local-data/finance-rules";
 import { activeProjectOptions, projectLabel } from "@/lib/local-data/projects";
-import { loadLocalWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
+import { loadLocalWorkspace, saveAuditedWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
 import type { LocalProject } from "@/lib/local-data/schema";
 import { cn } from "@/lib/utils";
 
@@ -158,10 +160,10 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
   const [statusFilter, setStatusFilter] = useState<"All" | ApprovalStatus>("All");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [projectFilter, setProjectFilter] = useState("All");
-  const [hydrated, setHydrated] = useState(false);
   const workspaceRef = useRef<ReturnType<typeof loadLocalWorkspace> | null>(null);
   const [accounts, setAccounts] = useState<FinanceAccount[]>([]);
   const [projects, setProjects] = useState<LocalProject[]>([]);
+  const [notice, setNotice] = useState<{ tone: "error" | "success"; message: string } | null>(null);
 
   useEffect(() => {
     const localWorkspace = loadLocalWorkspace();
@@ -177,7 +179,6 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
 
     if (localWorkspace.expenses.length) {
       setExpenses(localWorkspace.expenses.map(normalizeLocalExpense));
-      setHydrated(true);
       return;
     }
 
@@ -188,7 +189,6 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
         const normalized = (JSON.parse(saved) as LocalExpense[]).map(normalizeLocalExpense);
         setExpenses(normalized);
         workspaceRef.current = saveLocalWorkspace({ ...localWorkspace, expenses: normalized });
-        setHydrated(true);
         return;
       } catch {
         window.localStorage.removeItem(localExpenseStorageKey);
@@ -198,17 +198,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
     const seededExpenses = initialExpenses.length ? initialExpenses.map(normalizeInitialExpense) : demoExpenses.map(normalizeLocalExpense);
     setExpenses(seededExpenses);
     workspaceRef.current = saveLocalWorkspace({ ...localWorkspace, expenses: seededExpenses, sampleDataEnabled: true });
-    setHydrated(true);
   }, [initialExpenses]);
-
-  useEffect(() => {
-    if (hydrated) {
-      window.localStorage.setItem(localExpenseStorageKey, JSON.stringify(expenses));
-      if (workspaceRef.current) {
-        workspaceRef.current = saveLocalWorkspace({ ...workspaceRef.current, expenses });
-      }
-    }
-  }, [expenses, hydrated]);
 
   const filteredExpenses = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -247,6 +237,10 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
 
     return expenses.reduce(
       (result, expense) => {
+        if (!expenseImpactsBalances(expense)) {
+          return result;
+        }
+
         const amounts = convertedExpenseAmounts(expense);
         result.PKR += amounts.pkr;
         result.USD += amounts.usd;
@@ -261,6 +255,30 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
       { PKR: 0, USD: 0, month: { PKR: 0, USD: 0 } },
     );
   }, [expenses]);
+
+  function persistExpenses(
+    nextExpenses: LocalExpense[],
+    audit?: { action: string; entityId: string; metadata: Record<string, unknown> },
+  ) {
+    if (!workspaceRef.current) {
+      return;
+    }
+
+    window.localStorage.setItem(localExpenseStorageKey, JSON.stringify(nextExpenses));
+    const nextWorkspace = { ...workspaceRef.current, expenses: nextExpenses };
+    const savedWorkspace = audit
+      ? saveAuditedWorkspace(nextWorkspace, {
+          entityType: "expense",
+          actor: "Local Demo User",
+          entityId: audit.entityId,
+          action: audit.action,
+          metadata: audit.metadata,
+        })
+      : saveLocalWorkspace(nextWorkspace);
+
+    workspaceRef.current = savedWorkspace;
+    setExpenses(savedWorkspace.expenses);
+  }
 
   function updateForm<Key extends keyof typeof form>(key: Key, value: (typeof form)[Key]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -296,6 +314,19 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
     event.preventDefault();
     const selectedProject = projects.find((project) => project.id === form.projectId);
     if (!selectedProject) {
+      setNotice({ tone: "error", message: "Select a project before saving an expense." });
+      return;
+    }
+
+    const amountError = validatePositiveMoneyInput(Number(form.originalAmount));
+    if (amountError) {
+      setNotice({ tone: "error", message: amountError });
+      return;
+    }
+
+    const exchangeRateError = validateExchangeRateInput(Number(form.exchangeRate));
+    if (exchangeRateError) {
+      setNotice({ tone: "error", message: exchangeRateError });
       return;
     }
 
@@ -307,12 +338,21 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
       exchangeRate: Number(form.exchangeRate),
     };
 
-    setExpenses((current) => {
-      if (editingId) {
-        return current.map((expense) => (expense.id === editingId ? nextExpense : expense));
-      }
-
-      return [nextExpense, ...current];
+    const nextExpenses = editingId
+      ? expenses.map((expense) => (expense.id === editingId ? nextExpense : expense))
+      : [nextExpense, ...expenses];
+    persistExpenses(nextExpenses, {
+      action: editingId ? "updated" : "created",
+      entityId: nextExpense.id,
+      metadata: {
+        accountId: nextExpense.fundingAccountId,
+        projectId: nextExpense.projectId,
+        status: nextExpense.approvalStatus,
+      },
+    });
+    setNotice({
+      tone: "success",
+      message: editingId ? "Expense updated in the local workspace." : "Expense saved to the local workspace.",
     });
 
     resetForm();
@@ -339,7 +379,36 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
   }
 
   function deleteExpense(id: string) {
-    setExpenses((current) => current.filter((expense) => expense.id !== id));
+    const expense = expenses.find((item) => item.id === id);
+    if (!expense) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      expenseImpactsBalances(expense)
+        ? "This expense already affects balances. Void it instead of deleting it?"
+        : "Void this expense in the local workspace?",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    persistExpenses(
+      expenses.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              approvalStatus: "Voided",
+            }
+          : item,
+      ),
+      {
+        action: "voided",
+        entityId: expense.id,
+        metadata: { previousStatus: expense.approvalStatus, projectId: expense.projectId },
+      },
+    );
+    setNotice({ tone: "success", message: "Expense was voided and kept in the local audit trail." });
     if (editingId === id) {
       resetForm();
     }
@@ -414,6 +483,7 @@ export function LocalExpenseTracker({ initialExpenses }: LocalExpenseTrackerProp
           <h2 className="text-lg font-semibold text-slate-950">{editingId ? "Edit expense" : "Add expense"}</h2>
           <p className="text-sm text-slate-500">Saved locally in this browser for immediate demo use.</p>
         </div>
+        {notice ? <div className="mt-4"><FormNotice message={notice.message} tone={notice.tone} /></div> : null}
 
         <form className="mt-5 grid gap-4 lg:grid-cols-4" onSubmit={handleSubmit}>
           <Field label="Date">

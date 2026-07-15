@@ -1,12 +1,17 @@
 import {
-  convertedExpenseAmounts,
-  defaultUsdToPkrRate,
   formatMoney,
   type Currency,
   type FinanceAccount,
-  type LocalExpense,
 } from "@/lib/finance/local-finance";
-import type { LocalDonation, LocalTransfer, LocalWorkspace } from "@/lib/local-data/schema";
+import {
+  donationSignedAmounts,
+  expenseSignedAmounts,
+  financialRecordSignedAmounts,
+  transferImpactsBalances,
+  transferSignedAmounts,
+} from "@/lib/local-data/finance-rules";
+import type { LocalDonation, LocalFinancialRecord, LocalTransfer, LocalWorkspace } from "@/lib/local-data/schema";
+import type { LocalExpense } from "@/lib/finance/local-finance";
 
 export type LedgerType = "Donation" | "Expense" | "Transfer" | "Refund" | "Fee" | "Adjustment";
 
@@ -40,9 +45,7 @@ function convertedLabel(originalCurrency: Currency, pkrAmount: number, usdAmount
 }
 
 export function donationToLedger(donation: LocalDonation): FinanceLedgerEntry {
-  const signedPkr = donation.status === "Refunded" || donation.status === "Cancelled" ? -Math.abs(donation.pkrAmount) : donation.pkrAmount;
-  const signedUsd = donation.status === "Refunded" || donation.status === "Cancelled" ? -Math.abs(donation.usdAmount) : donation.usdAmount;
-  const signedOriginal = donation.status === "Refunded" || donation.status === "Cancelled" ? -Math.abs(donation.originalAmount) : donation.originalAmount;
+  const signed = donationSignedAmounts(donation);
 
   return {
     id: `ledger-${donation.id}`,
@@ -58,22 +61,19 @@ export function donationToLedger(donation: LocalDonation): FinanceLedgerEntry {
     status: donation.status,
     accountId: donation.accountId,
     originalCurrency: donation.originalCurrency,
-    originalAmount: signedOriginal,
+    originalAmount: signed.originalAmount,
     exchangeRate: donation.exchangeRate,
-    pkrAmount: signedPkr,
-    usdAmount: signedUsd,
-    netPkrAmount: signedPkr,
-    netUsdAmount: signedUsd,
-    originalLabel: formatMoney(signedOriginal, donation.originalCurrency),
-    convertedLabel: convertedLabel(donation.originalCurrency, signedPkr, signedUsd),
+    pkrAmount: signed.pkrAmount,
+    usdAmount: signed.usdAmount,
+    netPkrAmount: signed.netPkrAmount,
+    netUsdAmount: signed.netUsdAmount,
+    originalLabel: formatMoney(signed.originalAmount, donation.originalCurrency),
+    convertedLabel: convertedLabel(donation.originalCurrency, signed.pkrAmount, signed.usdAmount),
   };
 }
 
 export function expenseToLedger(expense: LocalExpense): FinanceLedgerEntry {
-  const amounts = convertedExpenseAmounts(expense);
-  const pkrAmount = -Math.abs(amounts.pkr);
-  const usdAmount = -Math.abs(amounts.usd);
-  const originalAmount = -Math.abs(expense.originalAmount);
+  const signed = expenseSignedAmounts(expense);
 
   return {
     id: `ledger-${expense.id}`,
@@ -89,20 +89,21 @@ export function expenseToLedger(expense: LocalExpense): FinanceLedgerEntry {
     status: expense.approvalStatus,
     accountId: expense.fundingAccountId,
     originalCurrency: expense.originalCurrency,
-    originalAmount,
+    originalAmount: signed.originalAmount,
     exchangeRate: expense.exchangeRate,
-    pkrAmount,
-    usdAmount,
-    netPkrAmount: pkrAmount,
-    netUsdAmount: usdAmount,
-    originalLabel: formatMoney(originalAmount, expense.originalCurrency),
-    convertedLabel: formatMoney(-Math.abs(amounts.convertedAmount), amounts.convertedCurrency),
+    pkrAmount: signed.pkrAmount,
+    usdAmount: signed.usdAmount,
+    netPkrAmount: signed.netPkrAmount,
+    netUsdAmount: signed.netUsdAmount,
+    originalLabel: formatMoney(signed.originalAmount, expense.originalCurrency),
+    convertedLabel: formatMoney(signed.convertedAmount, signed.convertedCurrency),
   };
 }
 
 export function transferToLedger(transfer: LocalTransfer, accounts: FinanceAccount[]): FinanceLedgerEntry {
   const from = accounts.find((account) => account.id === transfer.fromAccountId);
   const to = accounts.find((account) => account.id === transfer.toAccountId);
+  const signed = transferSignedAmounts(transfer);
 
   return {
     id: `ledger-${transfer.id}`,
@@ -119,103 +120,63 @@ export function transferToLedger(transfer: LocalTransfer, accounts: FinanceAccou
     accountId: transfer.fromAccountId,
     contraAccountId: transfer.toAccountId,
     originalCurrency: transfer.originalCurrency,
-    originalAmount: transfer.originalAmount,
+    originalAmount: signed.originalAmount,
     exchangeRate: transfer.exchangeRate,
-    pkrAmount: transfer.pkrAmount,
-    usdAmount: transfer.usdAmount,
-    netPkrAmount: 0,
-    netUsdAmount: 0,
-    originalLabel: formatMoney(transfer.originalAmount, transfer.originalCurrency),
-    convertedLabel: convertedLabel(transfer.originalCurrency, transfer.pkrAmount, transfer.usdAmount),
+    pkrAmount: signed.pkrAmount,
+    usdAmount: signed.usdAmount,
+    netPkrAmount: signed.netPkrAmount,
+    netUsdAmount: signed.netUsdAmount,
+    originalLabel: formatMoney(signed.originalAmount, transfer.originalCurrency),
+    convertedLabel: convertedLabel(transfer.originalCurrency, signed.pkrAmount, signed.usdAmount),
   };
 }
 
-export function staticLedgerEntries(): FinanceLedgerEntry[] {
-  return [
-    {
-      id: "ledger-refund-1",
-      sourceId: "refund-1",
-      date: "2026-07-08",
-      type: "Refund",
-      description: "Vendor refund for duplicate medical supply invoice",
-      projectId: "project-hospital",
-      project: "Hospital Project",
-      party: "City Medical Supplies",
-      method: "Bank Transfer",
-      reference: "REF-1021",
-      status: "Received",
-      accountId: "operations-bank-pkr",
-      originalCurrency: "PKR",
-      originalAmount: 85000,
-      exchangeRate: 278,
-      pkrAmount: 85000,
-      usdAmount: 85000 / 278,
-      netPkrAmount: 85000,
-      netUsdAmount: 85000 / 278,
-      originalLabel: formatMoney(85000, "PKR"),
-      convertedLabel: formatMoney(85000 / 278, "USD"),
-    },
-    {
-      id: "ledger-fee-1",
-      sourceId: "fee-1",
-      date: "2026-07-07",
-      type: "Fee",
-      description: "Bank transfer fee for program account movement",
-      projectId: "project-general-operations",
-      project: "General Operations",
-      party: "Bank",
-      method: "Bank Transfer",
-      reference: "FEE-3308",
-      status: "Paid",
-      accountId: "operations-bank-pkr",
-      originalCurrency: "PKR",
-      originalAmount: -2600,
-      exchangeRate: 278,
-      pkrAmount: -2600,
-      usdAmount: -2600 / 278,
-      netPkrAmount: -2600,
-      netUsdAmount: -2600 / 278,
-      originalLabel: formatMoney(-2600, "PKR"),
-      convertedLabel: formatMoney(-2600 / 278, "USD"),
-    },
-    {
-      id: "ledger-adjustment-1",
-      sourceId: "adjustment-1",
-      date: "2026-07-05",
-      type: "Adjustment",
-      description: "Opening balance adjustment for local demo ledger",
-      projectId: "project-general-operations",
-      project: "General Operations",
-      party: "Finance",
-      method: "Adjustment",
-      reference: "ADJ-0001",
-      status: "Approved",
-      accountId: "main-donations-bank",
-      originalCurrency: "USD",
-      originalAmount: 15000,
-      exchangeRate: defaultUsdToPkrRate,
-      pkrAmount: 15000 * defaultUsdToPkrRate,
-      usdAmount: 15000,
-      netPkrAmount: 15000 * defaultUsdToPkrRate,
-      netUsdAmount: 15000,
-      originalLabel: formatMoney(15000, "USD"),
-      convertedLabel: formatMoney(15000 * defaultUsdToPkrRate, "PKR"),
-    },
-  ];
+export function financialRecordToLedger(record: LocalFinancialRecord): FinanceLedgerEntry {
+  const signed = financialRecordSignedAmounts(record);
+
+  return {
+    id: `ledger-${record.id}`,
+    sourceId: record.id,
+    date: record.date,
+    type: record.type,
+    description: record.description,
+    projectId: record.projectId,
+    project: record.project,
+    party: record.party || "Finance",
+    method: record.method,
+    reference: record.reference || "No reference",
+    status: record.status,
+    accountId: record.accountId,
+    originalCurrency: record.originalCurrency,
+    originalAmount: signed.originalAmount,
+    exchangeRate: record.exchangeRate,
+    pkrAmount: signed.pkrAmount,
+    usdAmount: signed.usdAmount,
+    netPkrAmount: signed.netPkrAmount,
+    netUsdAmount: signed.netUsdAmount,
+    originalLabel: formatMoney(signed.originalAmount, record.originalCurrency),
+    convertedLabel: convertedLabel(record.originalCurrency, signed.pkrAmount, signed.usdAmount),
+  };
 }
 
-export function buildFinanceLedger(workspace: Pick<LocalWorkspace, "donations" | "expenses" | "transfers" | "financeAccounts">) {
+export function buildFinanceLedger(
+  workspace: Pick<LocalWorkspace, "donations" | "expenses" | "transfers" | "financialRecords" | "financeAccounts">,
+) {
   return [
     ...workspace.donations.map(donationToLedger),
     ...workspace.expenses.map(expenseToLedger),
     ...workspace.transfers.map((transfer) => transferToLedger(transfer, workspace.financeAccounts)),
-    ...staticLedgerEntries(),
+    ...workspace.financialRecords.map(financialRecordToLedger),
   ].sort((a, b) => b.date.localeCompare(a.date));
 }
 
 export function accountBalanceFromLedger(account: FinanceAccount, entries: FinanceLedgerEntry[]) {
   return entries.reduce((balance, entry) => {
     if (entry.type === "Transfer") {
+      if (!transferImpactsBalances({ status: entry.status as LocalTransfer["status"] })) {
+        return balance;
+      }
+
       if (entry.accountId === account.id) {
         return balance - (account.currency === "PKR" ? entry.pkrAmount : entry.usdAmount);
       }

@@ -1,3 +1,4 @@
+import { donationImpactsBalances } from "@/lib/local-data/finance-rules";
 import type { LocalDonation, LocalDonor } from "@/lib/local-data/schema";
 
 type DonorReference = {
@@ -89,7 +90,11 @@ export function donationMetrics(donor: LocalDonor, donations: LocalDonation[]) {
 
   return donorDonations.reduce(
     (result, donation) => {
-      const sign = donation.status === "Refunded" || donation.status === "Cancelled" ? -1 : 1;
+      if (!donationImpactsBalances(donation)) {
+        return result;
+      }
+
+      const sign = donation.status === "Refunded" ? -1 : 1;
       result.PKR += donation.pkrAmount * sign;
       result.USD += donation.usdAmount * sign;
       result.count += 1;

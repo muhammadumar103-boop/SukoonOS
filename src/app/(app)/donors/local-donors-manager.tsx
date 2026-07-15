@@ -3,8 +3,10 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Pencil, Search, Trash2 } from "lucide-react";
 import { z } from "zod";
+import { FormNotice } from "@/components/data-display/form-notice";
 import { StatusBadge } from "@/components/data-display/status-badge";
-import { appendAuditLogEntry, loadLocalWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
+import { donorLinkCounts } from "@/lib/local-data/integrity";
+import { loadLocalWorkspace, saveAuditedWorkspace, saveLocalWorkspace } from "@/lib/local-data/repository";
 import { deriveDonorRows, filterDonorRows } from "@/lib/local-data/donors";
 import type { LocalDonation, LocalDonor, LocalWorkspace } from "@/lib/local-data/schema";
 import { cn } from "@/lib/utils";
@@ -84,6 +86,7 @@ export function LocalDonorsManager() {
   const [reminderFilter, setReminderFilter] = useState<"All" | LocalDonor["reminderStatus"]>("All");
   const [hydrated, setHydrated] = useState(false);
   const [sampleDataEnabled, setSampleDataEnabled] = useState(true);
+  const [notice, setNotice] = useState<{ tone: "error" | "success"; message: string } | null>(null);
 
   useEffect(() => {
     const workspace = loadLocalWorkspace();
@@ -125,16 +128,19 @@ export function LocalDonorsManager() {
       return;
     }
 
-    const auditedWorkspace = appendAuditLogEntry({ ...workspaceRef.current, donors: nextDonors }, {
-      entityType: "donor",
-      entityId: donorId,
-      action,
-      actor: "Local Demo User",
-      metadata: { donorCount: nextDonors.length },
-    });
+    const savedWorkspace = saveAuditedWorkspace(
+      { ...workspaceRef.current, donors: nextDonors },
+      {
+        entityType: "donor",
+        entityId: donorId,
+        action,
+        actor: "Local Demo User",
+        metadata: { donorCount: nextDonors.length },
+      },
+    );
 
-    workspaceRef.current = saveLocalWorkspace(auditedWorkspace);
-    setDonors(auditedWorkspace.donors);
+    workspaceRef.current = saveLocalWorkspace(savedWorkspace);
+    setDonors(savedWorkspace.donors);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -175,10 +181,22 @@ export function LocalDonorsManager() {
 
     const nextDonors = editingId ? donors.map((donor) => (donor.id === editingId ? nextDonor : donor)) : [nextDonor, ...donors];
     saveWithAudit(nextDonors, editingId ? "updated" : "created", nextDonor.id);
+    setNotice({ tone: "success", message: editingId ? "Donor updated in the local workspace." : "Donor created in the local workspace." });
     resetForm();
   }
 
   function deleteDonor(donor: LocalDonor) {
+    if (workspaceRef.current) {
+      const links = donorLinkCounts(workspaceRef.current, donor.id);
+      if (links.donations > 0) {
+        setNotice({
+          tone: "error",
+          message: `${donor.fullName} still has linked donations and cannot be deleted until those records are reassigned.`,
+        });
+        return;
+      }
+    }
+
     const confirmed = window.confirm(`Delete donor "${donor.fullName}" from this browser's local workspace?`);
     if (!confirmed) {
       return;
@@ -186,6 +204,7 @@ export function LocalDonorsManager() {
 
     const nextDonors = donors.filter((item) => item.id !== donor.id);
     saveWithAudit(nextDonors, "deleted", donor.id);
+    setNotice({ tone: "success", message: `${donor.fullName} was removed from the local workspace.` });
     if (editingId === donor.id) {
       resetForm();
     }
@@ -199,6 +218,7 @@ export function LocalDonorsManager() {
         {sampleDataEnabled ? (
           <p className="mt-2 inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Sample donor records are loaded in this browser.</p>
         ) : null}
+        {notice ? <div className="mt-4"><FormNotice message={notice.message} tone={notice.tone} /></div> : null}
 
         <form className="mt-5 grid gap-4 lg:grid-cols-4" onSubmit={handleSubmit}>
           <Field className="lg:col-span-2" label="Full name" error={errors.fullName}>

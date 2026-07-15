@@ -1,5 +1,6 @@
 import { convertedExpenseAmounts, type FinanceBudget } from "@/lib/finance/local-finance";
 import type { FinanceLedgerEntry } from "@/lib/finance/ledger";
+import { donationImpactsBalances, expenseImpactsBalances, transferImpactsBalances } from "@/lib/local-data/finance-rules";
 import type { LocalProject, LocalWorkspace } from "@/lib/local-data/schema";
 
 export const projectTypes = [
@@ -389,17 +390,20 @@ export type DerivedProjectRow = LocalProject & {
 export function deriveProjectRows(workspace: LocalWorkspace, ledgerEntries: FinanceLedgerEntry[]) {
   return workspace.projects.map((project) => {
     const donations = workspace.donations.filter((donation) => recordMatchesProject(project, donation));
+    const postedDonations = donations.filter(donationImpactsBalances);
     const expenses = workspace.expenses.filter((expense) => recordMatchesProject(project, expense));
+    const postedExpenses = expenses.filter(expenseImpactsBalances);
     const transfers = workspace.transfers.filter((transfer) => recordMatchesProject(project, transfer));
+    const postedTransfers = transfers.filter(transferImpactsBalances);
     const budgetRows = workspace.financeBudgets.filter((budget) => recordMatchesProject(project, budget));
     const projectLedgerEntries = ledgerEntries.filter((entry) => recordMatchesProject(project, entry));
 
-    const donationTotalPkr = donations.reduce((sum, donation) => sum + donation.pkrAmount, 0);
-    const donationTotalUsd = donations.reduce((sum, donation) => sum + donation.usdAmount, 0);
-    const expenseTotalPkr = expenses.reduce((sum, expense) => sum + convertedExpenseAmounts(expense).pkr, 0);
-    const expenseTotalUsd = expenses.reduce((sum, expense) => sum + convertedExpenseAmounts(expense).usd, 0);
-    const transferTotalPkr = transfers.reduce((sum, transfer) => sum + transfer.pkrAmount, 0);
-    const transferTotalUsd = transfers.reduce((sum, transfer) => sum + transfer.usdAmount, 0);
+    const donationTotalPkr = postedDonations.reduce((sum, donation) => sum + (donation.status === "Refunded" ? -donation.pkrAmount : donation.pkrAmount), 0);
+    const donationTotalUsd = postedDonations.reduce((sum, donation) => sum + (donation.status === "Refunded" ? -donation.usdAmount : donation.usdAmount), 0);
+    const expenseTotalPkr = postedExpenses.reduce((sum, expense) => sum + convertedExpenseAmounts(expense).pkr, 0);
+    const expenseTotalUsd = postedExpenses.reduce((sum, expense) => sum + convertedExpenseAmounts(expense).usd, 0);
+    const transferTotalPkr = postedTransfers.reduce((sum, transfer) => sum + transfer.pkrAmount, 0);
+    const transferTotalUsd = postedTransfers.reduce((sum, transfer) => sum + transfer.usdAmount, 0);
     const budgetedPkr = budgetRows
       .filter((budget) => budget.currency === "PKR")
       .reduce((sum, budget) => sum + budget.amount, 0);
@@ -410,13 +414,13 @@ export function deriveProjectRows(workspace: LocalWorkspace, ledgerEntries: Fina
     return {
       ...project,
       budgetRows,
-      donationCount: donations.length,
+      donationCount: postedDonations.length,
       donationTotalPkr,
       donationTotalUsd,
-      expenseCount: expenses.length,
+      expenseCount: postedExpenses.length,
       expenseTotalPkr,
       expenseTotalUsd,
-      transferCount: transfers.length,
+      transferCount: postedTransfers.length,
       transferTotalPkr,
       transferTotalUsd,
       budgetedPkr,
