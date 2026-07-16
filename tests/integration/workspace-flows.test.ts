@@ -3,7 +3,7 @@ import { formatMoney } from "@/lib/finance/local-finance";
 import { deriveDonorRows } from "@/lib/local-data/donors";
 import { deriveDashboardData } from "@/lib/local-data/dashboard";
 import { deriveProjectRows } from "@/lib/local-data/projects";
-import { generateReport } from "@/lib/local-data/reporting";
+import { generateReport, generalFundFilterValue, operatingExpensesFilterValue } from "@/lib/local-data/reporting";
 import {
   createWorkspaceBackup,
   exportLocalWorkspace,
@@ -308,5 +308,165 @@ describe("local workspace workflows", () => {
     expect(sampleImported.sampleDataEnabled).toBe(true);
     expect(sampleImported.financialRecords).toHaveLength(sampleBaseline.financialRecords.length);
     expect(report.rows.length).toBeGreaterThan(0);
+  });
+
+  it("preserves general fund and operating-expense links through local workflow round-trips", () => {
+    const storage = createMemoryStorage();
+    let workspace = createEmptyWorkspace();
+
+    workspace = saveLocalWorkspace({
+      ...workspace,
+      donors: [
+        {
+          id: "donor-ops",
+          fullName: "Operations Supporter",
+          phone: "",
+          whatsapp: "",
+          email: "",
+          country: "Pakistan",
+          preferredContactMethod: "Email",
+          donorType: "Individual",
+          givingPreferences: [],
+          zakatPreference: "",
+          recurringDonor: false,
+          notes: "",
+          taxReceiptStatus: "Pending",
+          updateHistory: [],
+          nextUpdateDueDate: "",
+          reminderStatus: "None",
+        },
+      ],
+      projects: [
+        {
+          id: "project-general-operations",
+          name: "General Operations",
+          projectType: "General Operations",
+          location: "Karachi HQ",
+          status: "Active",
+          startDate: "2026-07-01",
+          targetCompletionDate: "",
+          budgetPkr: 0,
+          budgetUsd: 0,
+          beneficiaries: 0,
+          responsibleStaff: "Finance Team",
+          progress: 0,
+          notes: "",
+          timeline: [],
+          mediaPlaceholders: [],
+          documentPlaceholders: [],
+          donorUpdates: [],
+          completionReport: "",
+          archivedAt: "",
+        },
+      ],
+      financeAccounts: [
+        {
+          id: "main-donations-bank",
+          name: "Main Donations Bank",
+          kind: "Bank",
+          currency: "USD",
+          institution: "Meezan Bank",
+          purpose: "Incoming donor funds",
+          openingBalance: 0,
+          status: "Active",
+        },
+        {
+          id: "operations-bank-pkr",
+          name: "Operations Bank PKR",
+          kind: "Bank",
+          currency: "PKR",
+          institution: "HBL",
+          purpose: "Shared operations",
+          openingBalance: 0,
+          status: "Active",
+        },
+      ],
+      donations: [
+        {
+          id: "donation-general-fund",
+          donorId: "donor-ops",
+          donorName: "Operations Supporter",
+          projectId: "",
+          project: "General Fund",
+          accountId: "main-donations-bank",
+          method: "Bank Transfer",
+          date: "2026-07-15",
+          status: "Received",
+          receiptReference: "DON-OPS-1",
+          notes: "",
+          originalAmount: 300,
+          originalCurrency: "USD",
+          exchangeRate: 280,
+          pkrAmount: 84000,
+          usdAmount: 300,
+        },
+      ],
+      expenses: [
+        {
+          id: "expense-general-operations",
+          date: "2026-07-15",
+          originalAmount: 12000,
+          originalCurrency: "PKR",
+          exchangeRate: 280,
+          category: "Utilities",
+          projectId: "",
+          project: "General Operations",
+          fundingAccountId: "operations-bank-pkr",
+          description: "Internet and electricity",
+          paymentMethod: "Bank Transfer",
+          paidBy: "Finance Team",
+          receiptReference: "",
+          transferReference: "",
+          approvalStatus: "Approved",
+          proofNotes: "",
+          notes: "",
+          attachments: [],
+        },
+      ],
+    }, storage);
+
+    const projectRows = deriveProjectRows(workspace, buildFinanceLedger(workspace));
+    const operationsProject = projectRows.find((project) => project.id === "project-general-operations");
+    const linkCounts = projectLinkCounts(workspace, "project-general-operations");
+    const generalFundReport = generateReport(workspace, "monthly-donations", {
+      accountId: "",
+      category: "",
+      currency: "All",
+      dateFrom: "",
+      dateTo: "",
+      donorId: "",
+      projectId: generalFundFilterValue,
+      search: "",
+      status: "",
+    });
+    const operatingExpenseReport = generateReport(workspace, "missing-expense-proof", {
+      accountId: "",
+      category: "",
+      currency: "All",
+      dateFrom: "",
+      dateTo: "",
+      donorId: "",
+      projectId: operatingExpensesFilterValue,
+      search: "",
+      status: "",
+    });
+
+    expect(operationsProject?.expenseTotalPkr).toBe(12000);
+    expect(linkCounts.expenses).toBe(1);
+    expect(generalFundReport.rows).toHaveLength(1);
+    expect(operatingExpenseReport.rows[0]).toMatchObject({
+      project: "Operating Expenses",
+      description: "Internet and electricity",
+    });
+
+    const exported = exportLocalWorkspace(storage);
+    resetLocalWorkspace({ sampleData: false }, storage);
+    importLocalWorkspace(exported, storage);
+    const restored = loadLocalWorkspace(storage);
+    const restoredProjectRows = deriveProjectRows(restored, buildFinanceLedger(restored));
+
+    expect(restored.donations[0]).toMatchObject({ projectId: "", project: "General Fund" });
+    expect(restored.expenses[0]).toMatchObject({ projectId: "", project: "General Operations" });
+    expect(restoredProjectRows.find((project) => project.id === "project-general-operations")?.expenseTotalPkr).toBe(12000);
   });
 });

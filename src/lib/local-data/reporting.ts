@@ -7,6 +7,7 @@ import {
   deriveProjectRows,
   generalFundAllocationLabel,
   generalOperationsProjectLabel,
+  normalizeProjectName,
   projectLabel,
   recordMatchesProject,
 } from "@/lib/local-data/projects";
@@ -131,6 +132,41 @@ function reportExpenseProjectLabel(workspace: LocalWorkspace, reference: { proje
   }
 
   return projectLabel(workspace.projects, reference);
+}
+
+function matchesProjectRowFilter(selectedProjectId: string, projectName: string, projectId: string) {
+  if (!selectedProjectId) {
+    return true;
+  }
+
+  if (selectedProjectId === operatingExpensesFilterValue) {
+    return normalizeProjectName(projectName) === generalOperationsProjectLabel;
+  }
+
+  if (selectedProjectId === generalFundFilterValue) {
+    return false;
+  }
+
+  return projectId === selectedProjectId;
+}
+
+function reportApprovalProjectLabel(approval: { sourceType: string; projectId?: string; projectName: string }) {
+  if (approval.sourceType === "Expense" && !approval.projectId && normalizeProjectName(approval.projectName) === generalOperationsProjectLabel) {
+    return "Operating Expenses";
+  }
+
+  return approval.projectName;
+}
+
+function matchesApprovalProjectFilter(
+  workspace: LocalWorkspace,
+  selectedProjectId: string,
+  approval: { projectId?: string; projectName: string },
+) {
+  return matchesProjectFilter(workspace, selectedProjectId, {
+    projectId: approval.projectId,
+    project: approval.projectName,
+  });
 }
 
 function reportResult(
@@ -270,7 +306,7 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
   if (type === "project-income-spending") {
     const rows = filterRowsBySearch(
       projectRows
-        .filter((project) => (filters.projectId ? project.id === filters.projectId : true))
+        .filter((project) => matchesProjectRowFilter(filters.projectId, project.name, project.id))
         .map((project) => ({
           project: project.name,
           donationsPkr: formatMoney(project.donationTotalPkr, "PKR"),
@@ -581,16 +617,14 @@ export function generateReport(workspace: LocalWorkspace, type: ReportType, filt
     const rows = filterRowsBySearch(
       approvalRows
         .filter((approval) =>
-          (filters.projectId ? approval.projectId === filters.projectId : true) &&
-          (filters.projectId === operatingExpensesFilterValue ? approval.projectName === "Operating Expenses" : true) &&
-          (filters.projectId === generalFundFilterValue ? approval.projectName === generalFundAllocationLabel : true) &&
+          matchesApprovalProjectFilter(workspace, filters.projectId, approval) &&
           (filters.status ? approval.status === filters.status : true),
         )
         .map((approval) => ({
           requestedAt: approval.requestedAt,
           sourceType: approval.sourceType,
           title: approval.title,
-          project: approval.projectName,
+          project: reportApprovalProjectLabel(approval),
           requestedBy: approval.requestedBy,
           notes: approval.notes || "No notes",
         })),

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { formatMoney } from "@/lib/finance/local-finance";
 import { deriveDashboardData } from "@/lib/local-data/dashboard";
 import { createSampleWorkspace, migrateLocalWorkspace } from "@/lib/local-data/migrations";
-import { generateReport } from "@/lib/local-data/reporting";
+import { generateReport, generalFundFilterValue, operatingExpensesFilterValue } from "@/lib/local-data/reporting";
 
 describe("dashboard and reporting totals", () => {
   it("derives donation totals from final workspace records only", () => {
@@ -250,5 +250,109 @@ describe("dashboard and reporting totals", () => {
     expect(usdAccount?.balance).toBe(baselineUsdAccount?.balance);
     expect(pkrAccount?.movementTotal).toBe(baselinePkrAccount?.movementTotal);
     expect(pkrAccount?.balance).toBe(baselinePkrAccount?.balance);
+  });
+
+  it("treats projectless expenses as operating expenses and projectless donations as general fund in reports", () => {
+    const sampleWorkspace = createSampleWorkspace();
+    const workspace = migrateLocalWorkspace({
+      ...sampleWorkspace,
+      donations: [
+        ...sampleWorkspace.donations,
+        {
+          id: "donation-general-fund",
+          donorId: "donor-1",
+          donorName: "General Fund Donor",
+          projectId: "",
+          project: "General Fund",
+          accountId: "main-donations-bank",
+          method: "Bank Transfer",
+          date: "2026-07-15",
+          status: "Received",
+          receiptReference: "DON-GF-1",
+          notes: "Unrestricted support",
+          originalAmount: 250,
+          originalCurrency: "USD",
+          exchangeRate: 278,
+          pkrAmount: 69500,
+          usdAmount: 250,
+        },
+      ],
+      expenses: [
+        ...sampleWorkspace.expenses,
+        {
+          id: "expense-operating",
+          date: "2026-07-15",
+          originalAmount: 4500,
+          originalCurrency: "PKR",
+          exchangeRate: 278,
+          category: "Utilities",
+          projectId: "",
+          project: "General Operations",
+          fundingAccountId: "operations-bank-pkr",
+          description: "Office electricity bill",
+          paymentMethod: "Bank Transfer",
+          paidBy: "Finance Team",
+          receiptReference: "",
+          transferReference: "",
+          approvalStatus: "Approved",
+          proofNotes: "",
+          notes: "",
+          attachments: [],
+        },
+      ],
+    });
+
+    const generalFundReport = generateReport(workspace, "monthly-donations", {
+      accountId: "",
+      category: "",
+      currency: "All",
+      dateFrom: "",
+      dateTo: "",
+      donorId: "",
+      projectId: generalFundFilterValue,
+      search: "",
+      status: "",
+    });
+    const operatingExpenseReport = generateReport(workspace, "missing-expense-proof", {
+      accountId: "",
+      category: "",
+      currency: "All",
+      dateFrom: "",
+      dateTo: "",
+      donorId: "",
+      projectId: operatingExpensesFilterValue,
+      search: "",
+      status: "",
+    });
+    const operatingProjectReport = generateReport(workspace, "project-income-spending", {
+      accountId: "",
+      category: "",
+      currency: "All",
+      dateFrom: "",
+      dateTo: "",
+      donorId: "",
+      projectId: operatingExpensesFilterValue,
+      search: "",
+      status: "",
+    });
+
+    expect(generalFundReport.rows).toEqual([
+      {
+        month: "2026-07",
+        donations: 1,
+        pkrValue: formatMoney(69500, "PKR"),
+        usdValue: "$250.00",
+      },
+    ]);
+    expect(operatingExpenseReport.rows).toHaveLength(1);
+    expect(operatingExpenseReport.rows[0]).toMatchObject({
+      description: "Office electricity bill",
+      project: "Operating Expenses",
+      proofStatus: "Missing proof",
+    });
+    expect(operatingProjectReport.rows[0]).toMatchObject({
+      project: "General Operations",
+      expensesPkr: formatMoney(4500, "PKR"),
+    });
   });
 });

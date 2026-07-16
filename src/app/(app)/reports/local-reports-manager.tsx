@@ -4,7 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Download, FileJson, Search } from "lucide-react";
 import { FormNotice } from "@/components/data-display/form-notice";
 import { expenseCategories } from "@/lib/finance/local-finance";
-import { generateReport, reportTypes, type ReportFilters, type ReportType } from "@/lib/local-data/reporting";
+import {
+  generalFundFilterValue,
+  generateReport,
+  operatingExpensesFilterValue,
+  reportTypes,
+  type ReportFilters,
+  type ReportType,
+} from "@/lib/local-data/reporting";
+import { generalFundAllocationLabel, generalOperationsProjectLabel, projectLabel } from "@/lib/local-data/projects";
 import { loadLocalWorkspace } from "@/lib/local-data/repository";
 import { triggerDownload } from "@/lib/ui/downloads";
 import type { LocalWorkspace } from "@/lib/local-data/schema";
@@ -38,6 +46,14 @@ export function LocalReportsManager() {
   }, []);
 
   const report = useMemo(() => (workspace ? generateReport(workspace, reportType, filters) : null), [filters, reportType, workspace]);
+  const hasOperatingExpenses = useMemo(
+    () => workspace?.expenses.some((expense) => !expense.projectId && projectLabel(workspace.projects, expense) === generalOperationsProjectLabel) ?? false,
+    [workspace],
+  );
+  const hasGeneralFundDonations = useMemo(
+    () => workspace?.donations.some((donation) => !donation.projectId && projectLabel(workspace.projects, donation) === generalFundAllocationLabel) ?? false,
+    [workspace],
+  );
 
   function updateFilter<Key extends keyof ReportFilters>(key: Key, value: ReportFilters[Key]) {
     setFilters((current) => ({ ...current, [key]: value }));
@@ -118,6 +134,8 @@ export function LocalReportsManager() {
           </div>
           <select className={inputClass} onChange={(event) => updateFilter("projectId", event.target.value)} value={filters.projectId}>
             <option value="">All projects</option>
+            {hasOperatingExpenses ? <option value={operatingExpensesFilterValue}>Operating Expenses</option> : null}
+            {hasGeneralFundDonations ? <option value={generalFundFilterValue}>{generalFundAllocationLabel}</option> : null}
             {workspace.projects.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}
