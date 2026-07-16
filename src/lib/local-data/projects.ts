@@ -294,7 +294,9 @@ function createMigratedProject(name: string, existingIds: Set<string>) {
 }
 
 export function ensureWorkspaceProjects(projects: Partial<LocalProject>[], legacyNames: string[], sampleDataEnabled: boolean) {
-  const seedSource = projects.length ? projects : sampleDataEnabled ? sampleLocalProjects : [];
+  const seedSource = (projects.length ? projects : sampleDataEnabled ? sampleLocalProjects : []).filter(
+    (project) => normalizeProjectName(project.name ?? "") !== generalFundAllocationLabel,
+  );
   const ids = new Set<string>();
   const normalizedProjects = seedSource.map((project) => normalizeLocalProject(project, ids));
 
@@ -303,7 +305,7 @@ export function ensureWorkspaceProjects(projects: Partial<LocalProject>[], legac
 
   for (const rawName of legacyNames) {
     const name = normalizeProjectName(rawName);
-    if (!name) {
+    if (!name || name === generalFundAllocationLabel) {
       continue;
     }
 
@@ -333,10 +335,22 @@ export function findProjectByReference(projects: LocalProject[], reference: Proj
   }
 
   const normalizedName = normalizeProjectName(reference.project);
+  if (normalizedName === generalFundAllocationLabel) {
+    return undefined;
+  }
   return projects.find((project) => normalizeProjectName(project.name) === normalizedName);
 }
 
 export function resolveProjectReference(projects: LocalProject[], reference: ProjectReference) {
+  const normalizedReferenceName = normalizeProjectName(reference.project ?? "");
+  if (normalizedReferenceName === generalFundAllocationLabel) {
+    return {
+      projectId: "",
+      project: generalFundAllocationLabel,
+      projectName: generalFundAllocationLabel,
+    };
+  }
+
   const project = findProjectByReference(projects, reference);
 
   if (project) {
@@ -449,5 +463,5 @@ export function linkedProjectNamesFromWorkspace(workspace: Pick<LocalWorkspace, 
     ...workspace.transfers.map((transfer) => transfer.project),
     ...workspace.financeBudgets.map((budget) => budget.project),
     ...workspace.projects.map((project) => project.name),
-  ].filter(Boolean);
+  ].filter((name) => Boolean(name) && normalizeProjectName(name) !== generalFundAllocationLabel);
 }

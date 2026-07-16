@@ -154,4 +154,41 @@ describe("workspace migrations", () => {
     ]);
     expect(() => localWorkspaceSchema.parse(migrated)).not.toThrow();
   });
+
+  it("keeps general fund donations unlinked from projects during migration", () => {
+    const migrated = migrateLocalWorkspace({
+      sampleDataEnabled: false,
+      projects: [
+        {
+          id: "project-general-fund",
+          name: "General Fund",
+          projectType: "General Operations",
+        },
+      ],
+      donations: [
+        {
+          id: "donation-general-fund",
+          donorId: "donor-1",
+          donorName: "Unrestricted Donor",
+          projectId: "project-general-fund",
+          project: "General Fund",
+          accountId: "main-donations-bank",
+          method: "Bank Transfer",
+          date: "2026-07-15",
+          status: "Received",
+          receiptReference: "DON-GF-1",
+          notes: "",
+          originalAmount: 100,
+          originalCurrency: "USD",
+          exchangeRate: 278,
+        },
+      ],
+    });
+
+    expect(migrated.projects.map((project) => project.name)).not.toContain("General Fund");
+    expect(migrated.donations[0]).toMatchObject({
+      projectId: "",
+      project: "General Fund",
+    });
+  });
 });
